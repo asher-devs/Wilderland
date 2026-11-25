@@ -39,3 +39,4 @@ node test/browser.js     # headless Chrome, 3 browsers incl. mobile (needs puppe
 - **Crafting:** 125+ recipes in category tabs; new **Mason's Table** station. Stone now drops cobblestone — smelt it in a Furnace to get smooth stone.
 - Clay, gravel and moss generate in the world; plants drop fibre. Bag has 50 slots and a Sort button.
 - `node test/content.js` verifies every block is breakable, every item obtainable, every recipe craftable.
+- **Beds:** craft a Bed (6 planks + 6 fibre, Workbench). Right-click it by day to set your respawn point; at night right-click to sleep. When half the players (rounded up) are in bed the night is skipped, everyone wakes healed and monsters vanish. Being hit wakes you; move keys / "Get up" wake you manually.

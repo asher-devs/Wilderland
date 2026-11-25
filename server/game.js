@@ -105,7 +105,7 @@ class World {
       invDirty: true, statDirty: true, msgs: 0, msgT: Date.now(), chatTimes: [], returning: !!sv, look: cleanLook(look || (sv && sv.look)),
     };
     if (sv) {
-      p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
+      p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
       if (typeof sv.x === 'number' && sv.y > 0) { p.x = sv.x; p.y = sv.y; }
     } else {
       addToInv(p.inv, I.APPLE, 3); addToInv(p.inv, T.TORCH, 6);
@@ -122,7 +122,7 @@ class World {
     for (let ty = Math.floor(y); ty <= Math.floor(y + b.h - 1e-6); ty++) for (let tx = Math.floor(x - hw); tx <= Math.floor(x + hw - 1e-6); tx++) if (this.coll(tx, ty)) return true;
     return false;
   }
-  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y) } }; }
+  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y) } }; }
   dropPlayer(p, silent) {
     if (!this.players.has(p.id)) return;
     this.players.delete(p.id);
@@ -168,6 +168,8 @@ class World {
       case 'atk': return this.onAttack(p, m);
       case 'sel': p.sel = Math.max(0, Math.min(C.HOTBAR - 1, m.i | 0)); return;
       case 'sort': return this.onSort(p);
+      case 'sleep': return this.onSleep(p, m);
+      case 'wake': return this.wake(p);
       case 'swap': return this.onSwap(p, m);
       case 'craft': return this.onCraft(p, m);
       case 'equip': return this.onEquip(p, m);
@@ -184,7 +186,7 @@ class World {
     }
   }
   onMove(p, m) {
-    if (p.dead) return;
+    if (p.dead || p.sleep) return;
     const { x, y } = m; if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const now = Date.now(), dt = Math.max(0.02, Math.min(1, (now - p.lastMv) / 1000)); p.lastMv = now;
     const lim = 48 * dt + 2.5;
@@ -232,6 +234,11 @@ class World {
       delete this.chests[key];
       for (const q of this.players.values()) if (q.chest === key) { q.chest = null; this.send(q, { t: 'chestClosed' }); }
     }
+    if (id === T.BED || id === T.BED_R) { // beds are two tiles: remove the other half too, drop one bed
+      const ox = id === T.BED ? x + 1 : x - 1; if (this.get(ox, y) === (id === T.BED ? T.BED_R : T.BED)) this.setTile(ox, y, T.AIR);
+      if (id === T.BED_R) this.spawnDrop(T.BED, 1, x + 0.5, y + 0.5);
+      for (const q of this.players.values()) if (q.sleep && (q.sleep.x === x || q.sleep.x === ox) && q.sleep.y === y) this.wake(q);
+    }
     if (b.drop >= 0 && Math.random() < b.dropP) this.spawnDrop(b.drop, 1, x + 0.5, y + 0.5);
     if (D.LEAF[id] && id !== T.PINE && Math.random() < 0.07) this.spawnDrop(I.APPLE, 1, x + 0.5, y + 0.5);
     if (D.LOGS[id]) this.fellTree(p, x, y, id);
@@ -278,6 +285,12 @@ class World {
     const sup = (a, b2) => { const v = this.get(a, b2); return v !== T.AIR && v !== T.WATER && !D.DECOR[v]; };
     if (!(sup(x - 1, y) || sup(x + 1, y) || sup(x, y - 1) || sup(x, y + 1) || y > this.surf[x] + 1)) return;
     let blk = it.block;
+    if (blk === T.BED) { // two tiles wide, needs solid ground under both halves
+      const free = (a) => this.get(a, y) === T.AIR && D.SOLID[this.get(a, y + 1)] === 1 && a > 0 && a < this.W - 1;
+      let lx = -1; if (free(x) && free(x + 1)) lx = x; else if (free(x) && free(x - 1)) lx = x - 1; if (lx < 0) return;
+      this.setTile(lx, y, T.BED); this.setTile(lx + 1, y, T.BED_R); this.fx.push(['place', lx + 1, y + 0.5, T.BED]);
+      if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true; return;
+    }
     const sh = D.SHAPE[blk];
     if (sh && sh.kind === 'stairR') blk = p.x < x + 0.5 ? D.SHAPE_OF[sh.base + ':stairR'] : D.SHAPE_OF[sh.base + ':stairL']; // tall side faces away from you
     if (D.COLL[blk]) for (const q of this.players.values()) {
@@ -313,6 +326,28 @@ class World {
       this.fx.push(['mobdie', mob.x, mob.y + mob.h / 2, mob.type]);
       for (const d of MOBS[mob.type].drops) if (Math.random() < d[1]) this.spawnDrop(d[0], d[2] + Math.floor(Math.random() * (d[3] - d[2] + 1)), mob.x, mob.y);
     }
+  }
+  bedLeft(x, y) { const v = this.get(x, y); return v === T.BED ? x : v === T.BED_R && this.get(x - 1, y) === T.BED ? x - 1 : -1; }
+  /** right-click a bed: set your spawn; at night also sleep. When half the players (rounded up) sleep, the night is skipped. */
+  onSleep(p, m) {
+    if (p.dead || p.sleep) return;
+    const x = m.x | 0, y = m.y | 0, lx = this.bedLeft(x, y); if (lx < 0 || !this.reach(p, lx, y)) return;
+    p.bed = [lx, y]; p.statDirty = true;
+    if (!isNight(this.state.time)) return this.send(p, { t: 'toast', m: 'Spawn point set. You can only sleep at night.' });
+    if (this.sleepers().some((q) => q.sleep.x === lx && q.sleep.y === y)) return this.send(p, { t: 'toast', m: 'This bed is taken' });
+    p.sleep = { x: lx, y, hp: p.hp }; p.x = lx + 1.7; p.y = y + 0.75 - p.h; p.vx = p.vy = 0; p.a = 10; p.mine = null; p.lastMv = Date.now();
+    this.send(p, { t: 'sleepOn', x: p.x, y: p.y });
+    const n = this.players.size, z = this.sleepers().length, need = Math.ceil(n / 2);
+    if (z >= need) this.skipNight(); else this.sys(`💤 ${p.name} is sleeping (${z}/${need} needed to skip the night)`);
+  }
+  sleepers() { return [...this.players.values()].filter((q) => q.sleep); }
+  wake(p) { if (!p.sleep) return; p.sleep = null; p.a = 0; p.lastMv = Date.now(); this.send(p, { t: 'wake' }); }
+  skipNight() {
+    const st = this.state; st.time = 0.02; st.nights++; this.dirty = true; this.wasNight = false;
+    this.weather.target = 0; this.weather.rain = 0; this.weather.t = 90 + Math.random() * 120;
+    for (const [id, mob] of [...this.mobs]) if (!MOBS[mob.type].passive) this.mobs.delete(id);
+    for (const q of this.players.values()) { if (q.sleep) { q.hp = q.maxhp; q.statDirty = true; } this.wake(q); }
+    this.sys(`🌅 Everyone slept through the night — good morning! (night ${st.nights} survived)`);
   }
   /** merge stacks and order by category then id; hotbar (first 10 slots) is left alone */
   onSort(p) {
@@ -450,6 +485,7 @@ class World {
     for (const p of this.players.values()) {
       if (p.invul > 0) p.invul -= dt;
       if (p.dead) { p.deadT -= dt; if (p.deadT <= 0) this.respawn(p); continue; }
+      if (p.sleep) { if (p.hp < p.sleep.hp - 0.5) this.wake(p); else p.sleep.hp = Math.max(p.sleep.hp, p.hp); } // being hurt wakes you
       p.regen += dt; if (p.regen > 4 && p.hp < p.maxhp) { p.hp = Math.min(p.maxhp, p.hp + 3 * dt); p.statDirty = true; }
       // drop mining progress only if the client stopped sending 'mine' (NOT when the player simply stands still: idle clients send few 'mv' packets)
       if (p.mine && Date.now() - p.mine.last > 800) p.mine = null;
@@ -493,14 +529,14 @@ class World {
     this.send(p, { t: 'kb', vx: dir * 7, vy: -7 });
     this.fx.push(['hurt', p.x, p.y + 0.8, p.id]);
     if (p.hp <= 0) {
-      p.hp = 0; p.dead = true; p.deadT = 3.5; p.mine = null; p.chest = null;
+      p.hp = 0; p.dead = true; p.deadT = 3.5; p.mine = null; p.sleep = null; p.chest = null;
       this.fx.push(['die', p.x, p.y + 0.8, p.id]);
       this.sys(`${p.name} was slain by a ${by || 'monster'}`);
       this.send(p, { t: 'dead', by: by || 'monster' });
     }
   }
   respawn(p) {
-    p.dead = false; p.hp = Math.ceil(p.maxhp * 0.6); p.x = this.spawn.x; p.y = this.spawn.y; p.vx = p.vy = 0; p.invul = 2; p.statDirty = true; p.lastMv = Date.now();
+    p.dead = false; p.hp = Math.ceil(p.maxhp * 0.6); p.sleep = null; p.a = 0; const bd = p.bed && this.bedLeft(p.bed[0], p.bed[1]) === p.bed[0] ? p.bed : null; p.x = bd ? bd[0] + 1 : this.spawn.x; p.y = bd ? bd[1] + 1 - p.h - 0.05 : this.spawn.y; p.vx = p.vy = 0; p.invul = 2; p.statDirty = true; p.lastMv = Date.now();
     this.send(p, { t: 'respawn', x: p.x, y: p.y });
   }
   trySpawn(night) {

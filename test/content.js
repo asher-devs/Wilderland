@@ -128,6 +128,37 @@ for (const [i, r] of RECIPES.entries()) {
     world.onCraft(p, { r: i }); ok(!p.inv.some((s) => s && s[0] === r.out && !r.ing.some(([id]) => id === r.out)), `craft #${i}: needs a ${r.st}`);
   }
 }
+// beds & sleeping
+section('beds');
+const bx = sx + 1;
+const putBed = () => { clear(); give(T.BED, 2); world.onPlace(p, { x: bx, y: ty }); };
+putBed(); ok(world.get(bx, ty) === T.BED && world.get(bx + 1, ty) === T.BED_R, 'bed places as two tiles'); 
+clear(); world.setTile(bx, ty, T.AIR); give(T.BED, 1); world.setTile(bx + 1, ty + 1, T.AIR); world.setTile(bx - 1, ty + 1, T.AIR); world.onPlace(p, { x: bx, y: ty }); ok(world.get(bx, ty) === T.AIR && world.get(bx - 1, ty) === T.AIR, 'bed needs solid ground under both halves'); world.setTile(bx + 1, ty + 1, T.STONE); world.setTile(bx - 1, ty + 1, T.STONE);
+putBed(); world.drops.clear(); p.inv.fill(null); mine(bx + 1, ty); ok(world.get(bx, ty) === T.AIR && world.get(bx + 1, ty) === T.AIR, 'breaking one half removes the whole bed');
+ok([...world.drops.values()].filter((d) => d.item === T.BED).length === 1, 'a broken bed drops exactly one bed');
+const day = 0.1, night = 0.7;
+putBed(); world.state.time = day; p.x = bx + 0.5; world.onSleep(p, { x: bx, y: ty });
+ok(!p.sleep && p.bed && p.bed[0] === bx, 'right-clicking a bed by day sets spawn but does not sleep');
+world.state.time = night; p.hp = 30; const n0 = world.state.nights; world.mobs.set(999, { id: 999, type: 'zombie', x: sx, y: sy - 2, w: .7, h: 1.7, hp: 20, vx: 0, vy: 0 });
+world.onSleep(p, { x: bx, y: ty });
+ok(world.state.time < 0.1 && world.state.nights === n0 + 1, 'sleeping alone at night skips to morning');
+ok(!p.sleep && p.hp === p.maxhp, 'you wake up fully healed'); ok(!world.mobs.has(999), 'hostile mobs vanish when the night is skipped');
+ok(fake.sent.some((m) => m.t === 'sleepOn') && fake.sent.some((m) => m.t === 'wake'), 'client is told to lie down and then wake');
+// majority rule with 3 players
+const f2 = { open: true, sent: [], send(m) { this.sent.push(typeof m === 'string' ? JSON.parse(m) : m); }, close() {} }, f3 = { open: true, sent: [], send(m) { this.sent.push(typeof m === 'string' ? JSON.parse(m) : m); }, close() {} };
+const p2 = world.addPlayer(f2, 'p2', 'Bea'), p3 = world.addPlayer(f3, 'p3', 'Cy');
+for (const q of [p, p2, p3]) { q.x = bx + 0.5; q.y = sy - 1.7; }
+clear(); putBed(); give(T.BED, 1); world.setTile(bx + 3, ty, T.BED); world.setTile(bx + 4, ty, T.BED_R); world.setTile(bx + 3, ty + 1, T.STONE); world.setTile(bx + 4, ty + 1, T.STONE);
+world.state.time = night; world.onSleep(p, { x: bx, y: ty });
+ok(p.sleep && world.state.time === night, '1 of 3 asleep: night continues');
+world.onSleep(p2, { x: bx, y: ty }); ok(!p2.sleep, 'a bed that is taken cannot be shared');
+p2.x = bx + 3.5; world.onSleep(p2, { x: bx + 3, y: ty }); ok(world.state.time < 0.1, '2 of 3 asleep: night skipped');
+// moving while asleep is ignored, hurt wakes you, death respawns at bed
+world.state.time = night; p.x = bx + 0.5; world.onSleep(p, { x: bx, y: ty }); const px0 = p.x; world.onMove(p, { x: px0 + 1, y: p.y, vx: 0, vy: 0, f: 1, a: 0 }); ok(p.x === px0 && p.sleep, 'position updates are ignored while asleep');
+p.hp -= 10; world.step(0.05); ok(!p.sleep, 'taking damage wakes you');
+p.bed = [bx, ty]; p.dead = true; world.respawn(p); ok(Math.abs(p.x - (bx + 1)) < 0.01 && p.y < ty + 1, 'respawn at your bed');
+world.setTile(bx, ty, T.AIR); world.setTile(bx + 1, ty, T.AIR); p.dead = true; world.respawn(p); ok(Math.abs(p.x - world.spawn.x) < 0.01, 'respawn falls back to world spawn if the bed is gone');
+world.dropPlayer(p2, true); world.dropPlayer(p3, true);
 // sorting
 p.inv.fill(null); p.inv[12] = [T.DIRT, 10, 0]; p.inv[30] = [T.DIRT, 20, 0]; p.inv[41] = [T.STONE, 5, 0]; world.onSort(p);
 ok(p.inv[10] && p.inv[10][0] === T.DIRT && p.inv[10][1] === 30, 'sort merges stacks'); ok(p.inv.filter(Boolean).length === 2, 'sort packs items together');

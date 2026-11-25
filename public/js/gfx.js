@@ -229,6 +229,8 @@ const Gfx = (() => {
     [T.MARBLE](g, r) { noiseFill(g, [236, 238, 244], 6, r); for (let k = 0; k < 3; k++) { let x = (r() * 16) | 0, y = 0; for (let s = 0; s < 16; s++) { pixel(g, x, y, col([150, 156, 176], (r() - 0.5) * 20)); if (r() < 0.4) pixel(g, Math.min(15, x + 1), y, col([196, 200, 214])); x = Math.max(0, Math.min(15, x + ((r() * 3) | 0) - 1)); y++; } } rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.5)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.15)'); },
     [T.BASALT](g, r) { noiseFill(g, [58, 60, 70], 10, r); for (let x = 0; x < 16; x += 4) rect(g, x, 0, 1, 16, 'rgba(0,0,0,0.35)'); for (let i = 0; i < 8; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([98, 100, 116])); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.14)'); },
     [T.MASON](g) { rect(g, 1, 8, 3, 8, col([120, 78, 38])); rect(g, 12, 8, 3, 8, col([120, 78, 38])); rect(g, 0, 5, 16, 4, col([142, 146, 158])); rect(g, 0, 5, 16, 1, col([196, 200, 212])); rect(g, 0, 9, 16, 1, col([92, 96, 108])); rect(g, 3, 1, 5, 4, col([176, 180, 192])); rect(g, 3, 1, 5, 1, col([220, 224, 234])); rect(g, 9, 2, 4, 3, col([110, 114, 128])); rect(g, 10, 3, 1, 2, col([60, 62, 70])); rect(g, 4, 12, 8, 2, col([100, 64, 30])); },
+    [T.BED](g, r) { rect(g, 0, 12, 16, 4, col([96, 60, 30])); rect(g, 0, 9, 2, 7, col([120, 78, 38])); rect(g, 1, 8, 15, 4, col([232, 232, 240])); rect(g, 1, 8, 15, 1, col([255, 255, 255])); rect(g, 2, 6, 6, 3, col([246, 246, 252])); rect(g, 2, 6, 6, 1, '#fff'); rect(g, 7, 8, 9, 4, col([196, 54, 62])); rect(g, 7, 8, 9, 1, col([226, 90, 96])); for (const x of [9, 12, 15]) rect(g, x, 9, 1, 3, col([160, 38, 46])); rect(g, 0, 15, 2, 1, col([60, 38, 20])); },
+    [T.BED_R](g, r) { rect(g, 0, 12, 16, 4, col([96, 60, 30])); rect(g, 14, 10, 2, 6, col([120, 78, 38])); rect(g, 0, 8, 15, 4, col([196, 54, 62])); rect(g, 0, 8, 15, 1, col([226, 90, 96])); for (const x of [2, 5, 8, 11]) rect(g, x, 9, 1, 3, col([160, 38, 46])); rect(g, 14, 8, 1, 4, col([232, 232, 240])); rect(g, 14, 15, 2, 1, col([60, 38, 20])); },
     [T.LANTERN](g) { rect(g, 7, 0, 2, 3, col([60, 62, 72])); rect(g, 4, 3, 8, 2, col([70, 72, 84])); rect(g, 4, 5, 8, 8, col([40, 44, 56])); rect(g, 5, 6, 6, 6, col([255, 200, 90])); rect(g, 6, 7, 4, 4, col([255, 240, 170])); rect(g, 7, 8, 2, 2, '#fff'); rect(g, 7, 5, 2, 8, col([40, 44, 56])); rect(g, 4, 13, 8, 2, col([70, 72, 84])); rect(g, 5, 15, 6, 1, col([50, 52, 62])); },
   });
 
@@ -327,7 +329,7 @@ const Gfx = (() => {
   }
   function drawPlayer(g, cx, by, u, o) {
     const look = o.look; g.save(); g.translate(Math.round(cx), Math.round(by)); g.scale(o.f < 0 ? -1 : 1, 1);
-    if (o.dead) { g.rotate(-1.5); g.translate(-u * 2, 0); }
+    if (o.dead || o.sleep) { g.rotate(-1.5); g.translate(-u * 2, 0); }
     const t = o.t, walk = o.walk, air = o.air;
     const flash = o.hurt > 0 ? 0.55 : 0, f = (c, d = 0) => { const k = flash; return col([c[0] + (255 - c[0]) * k * 0.4 + 40 * k, c[1] * (1 - k * 0.5) + d, c[2] * (1 - k * 0.5) + d], d); };
     const bob = air ? 0 : (walk > 0.1 ? Math.abs(Math.sin(t * 11)) * -0.8 : Math.sin(t * 2.2) * -0.35);

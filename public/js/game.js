@@ -121,6 +121,7 @@ const Game = (() => {
     } catch (e) { /* ignore */ }
   }
   function leave(silent) {
+    S.sleeping = false; UI.sleeping(false);
     S.leaving = true; S.running = false; try { S.ws && S.ws.close(); } catch (e) { /* ignore */ } S.ws = null; reconnecting = false;
     tiles = null; S.players.clear(); S.mobs.clear(); S.drops.clear(); S.particles.length = 0;
     UI.left(silent);
@@ -142,7 +143,9 @@ const Game = (() => {
       case 'kb': if (S.me) { S.me.vx = m.vx; S.me.vy = m.vy; } return;
       case 'tp': if (S.me) { S.me.x = m.x; S.me.y = m.y; S.me.vx = S.me.vy = 0; } return;
       case 'dead': S.dead = true; S.act.active = false; UI.dead(m.by); Sound.play('die'); return;
-      case 'respawn': S.dead = false; S.me.x = m.x; S.me.y = m.y; S.me.vx = S.me.vy = 0; S.cam.x = m.x; S.cam.y = m.y; UI.respawned(); return;
+      case 'sleepOn': S.sleeping = true; S.me.x = m.x; S.me.y = m.y; S.me.vx = S.me.vy = 0; UI.sleeping(true); return;
+      case 'wake': S.sleeping = false; UI.sleeping(false); return;
+      case 'respawn': S.dead = false; S.sleeping = false; UI.sleeping(false); S.me.x = m.x; S.me.y = m.y; S.me.vx = S.me.vy = 0; S.cam.x = m.x; S.cam.y = m.y; UI.respawned(); return;
       case 'chest': S.chest = { x: m.x, y: m.y, slots: m.slots }; UI.chest(); return;
       case 'chestClosed': S.chest = null; UI.chest(); return;
       case 'crafted': Sound.play('craft'); UI.crafted(m.item); return;
@@ -236,6 +239,12 @@ const Game = (() => {
   function updateMe(dt) {
     const m = S.me, now = performance.now();
     if (S.dead) { m.vx *= 0.8; m.anim = 9; return; }
+    if (S.sleeping) { // lie still until you press a move key (or the Wake button)
+      m.vx = 0; m.vy = 0; m.anim = 10; m.walk = false;
+      if (keys.has('a') || keys.has('d') || keys.has('w') || keys.has(' ') || keys.has('arrowleft') || keys.has('arrowright') || keys.has('arrowup') || S.input.left || S.input.right || S.input.jump) { S.sleeping = false; UI.sleeping(false); send({ t: 'wake' }); }
+      m.sendT -= dt; if (m.sendT <= 0) { m.sendT = 0.5; send({ t: 'mv', x: m.x, y: m.y, vx: 0, vy: 0, f: m.f, a: 10 }); }
+      return;
+    }
     const modal = UI.typing();
     let dir = 0; if (!modal) { if (keys.has('a') || keys.has('arrowleft') || S.input.left) dir -= 1; if (keys.has('d') || keys.has('arrowright') || S.input.right) dir += 1; }
     const wantJump = !modal && (keys.has(' ') || keys.has('w') || keys.has('arrowup') || S.input.jump);
@@ -282,6 +291,7 @@ const Game = (() => {
       } else if (a.mode === 'place') {
         const id = get(tx, ty);
         if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
+        else if (a.edge && (id === T.BED || id === T.BED_R) && inReach(tx, ty)) { send({ t: 'sleep', x: tx, y: ty }); }
         else if (a.edge && (id === T.BENCH || id === T.FURNACE || id === T.MASON) && inReach(tx, ty)) { UI.openInventory(); }
         else if (it && it.kind === 'axe' && DEFS.STRIPPED[id] && inReach(tx, ty)) { if (now > placeT) { placeT = now + 350; send({ t: 'place', x: tx, y: ty }); acting = true; } }
         else if (it && it.block !== undefined) { if (now > placeT && inReach(tx, ty)) { placeT = now + 120; send({ t: 'place', x: tx, y: ty }); acting = true; } }
@@ -436,8 +446,8 @@ const Game = (() => {
     // mobs
     for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16, { f: o.f, t: o.t, hurt: o.hurt, air: o.air });
     // other players
-    for (const p of S.players.values()) { const dead = p.a === 9; Gfx.drawPlayer(g, p.x * TS + ox, (p.y + C.PH) * TS + oy, TS / 16, { look: p.look, f: p.f, t: p.t, walk: p.walkAmt, air: (p.a & 3) === 2, swing: (p.a & 4) && !dead ? p.swingT : -1, held: p.held, head: p.head, body: p.body, dead }); }
-    if (S.me && !(S.dead)) { const m = S.me; Gfx.drawPlayer(g, m.x * TS + ox, (m.y + C.PH) * TS + oy, TS / 16, { look: myLook(), f: m.f, t: m.walkT, walk: m.walk ? 1 : 0, air: !m.onGround && !m.inWater, swing: m.swing, held: S.inv[S.sel] ? S.inv[S.sel][0] : 0, head: S.eq.head ? S.eq.head[0] : 0, body: S.eq.body ? S.eq.body[0] : 0, hurt: S.flash > 0.5 ? 1 : 0 }); }
+    for (const p of S.players.values()) { const dead = p.a === 9, slp = p.a === 10; Gfx.drawPlayer(g, p.x * TS + ox, (p.y + C.PH) * TS + oy, TS / 16, { look: p.look, f: p.f, t: p.t, walk: p.walkAmt, air: !slp && (p.a & 3) === 2, swing: (p.a & 4) && !dead && !slp ? p.swingT : -1, held: p.held, head: p.head, body: p.body, dead, sleep: slp }); }
+    if (S.me && !(S.dead)) { const m = S.me; Gfx.drawPlayer(g, m.x * TS + ox, (m.y + C.PH) * TS + oy, TS / 16, { look: myLook(), f: m.f, t: m.walkT, walk: m.walk ? 1 : 0, air: !S.sleeping && !m.onGround && !m.inWater, swing: m.swing, held: S.inv[S.sel] ? S.inv[S.sel][0] : 0, head: S.eq.head ? S.eq.head[0] : 0, body: S.eq.body ? S.eq.body[0] : 0, hurt: S.flash > 0.5 ? 1 : 0, sleep: S.sleeping }); }
     // falling trees
     for (let i = S.falling.length - 1; i >= 0; i--) {
       const f = S.falling[i]; f.t += (S.dt || 0.016); const k = Math.min(1, f.t / 1.15), ang = f.dir * (k * k * (Math.PI / 2) * 1.0) + (k > 0.9 ? f.dir * Math.sin((k - 0.9) * 30) * 0.03 : 0);

@@ -18,7 +18,7 @@
     SANDSTONE_BRICK: 71, SMOOTH_SANDSTONE: 72, CHISELED_SANDSTONE: 73, SNOW_BRICK: 74, ICE_BRICK: 75,
     PINE_LOG: 76, MAPLE_LOG: 77, WILLOW_LOG: 78, STRIPPED_OAK: 79, STRIPPED_PINE: 80, STRIPPED_MAPLE: 81, STRIPPED_WILLOW: 82,
     PINE_PLANKS: 83, MAPLE_PLANKS: 84, WILLOW_PLANKS: 85, PARQUET: 86, BOOKSHELF: 87, BEAM: 88, HAY: 89,
-    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94,
+    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96,
   };
   const I = {
     WOOD_PICK: 100, WOOD_AXE: 101, WOOD_SWORD: 102,
@@ -136,6 +136,8 @@
     [T.BASALT, 'Basalt', 4.0, 1, 'stone', T.BASALT, true],
     [T.MASON, "Mason's Table", 1.5, 0, 'wood', T.MASON, false],
     [T.LANTERN, 'Lantern', 0.1, 0, 'soft', T.LANTERN, false, [1.0, 0.78, 0.45]],
+    [T.BED, 'Bed', 0.6, 0, 'wood', T.BED, false],
+    [T.BED_R, 'Bed', 0.6, 0, 'wood', -1, false],
   ];
 
   // ---- shaped variants (slab / stairs / wall). Each gets its own tile id (200+) and a collision shape.
@@ -176,7 +178,7 @@
   const OPAQUE = new Uint8Array(256); for (let i = 0; i < 256; i++) OPAQUE[i] = SOLID[i] && !CLEAR[i] ? 1 : 0;
   const LOGS = new Uint8Array(256); for (const k of [T.LOG, T.PINE_LOG, T.MAPLE_LOG, T.WILLOW_LOG]) LOGS[k] = 1; // natural trunks
   const STRIPPED = { [T.LOG]: T.STRIPPED_OAK, [T.PINE_LOG]: T.STRIPPED_PINE, [T.MAPLE_LOG]: T.STRIPPED_MAPLE, [T.WILLOW_LOG]: T.STRIPPED_WILLOW };
-  const NEWBLOCKS = []; for (let i = 36; i <= T.LANTERN; i++) NEWBLOCKS.push(i);
+  const NEWBLOCKS = []; for (let i = 36; i <= T.BED; i++) NEWBLOCKS.push(i);
   const PLACEABLE = new Set([T.GRASS, T.DIRT, T.STONE, T.LOG, T.SAND, T.SNOW, T.COPPER, T.IRON, T.GOLD, T.CRYSTAL,
     T.SANDSTONE, T.ICE, T.CACTUS, T.PLANKS, T.BENCH, T.FURNACE, T.CHEST, T.TORCH, T.MUD, T.SLATE, ...NEWBLOCKS]);
   for (const k in SHAPE) if (SHAPE[k].item === +k) PLACEABLE.add(+k);
@@ -270,6 +272,7 @@
     R(T.BEAM, 2, [[T.LOG, 1]], 'bench', 'wood'),
     R(T.PARQUET, 4, [[T.PLANKS, 2], [T.PINE_PLANKS, 2]], 'bench', 'wood'),
     R(T.SHINGLE, 4, [[T.MAPLE_PLANKS, 4]], 'bench', 'wood'),
+    R(T.BED, 1, [[T.PLANKS, 6], [I.FIBER, 6]], 'bench', 'decor'),
     R(T.BOOKSHELF, 1, [[T.PLANKS, 6], [I.FIBER, 3]], 'bench', 'wood'),
     R(T.THATCH, 2, [[I.FIBER, 4]], 'hand', 'wood'),
     R(T.HAY, 1, [[I.FIBER, 9]], 'hand', 'wood'),

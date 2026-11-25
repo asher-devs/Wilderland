@@ -3,7 +3,7 @@ const UI = (() => {
   const { T, I, ITEMS, C, RECIPES, BLOCKS } = DEFS;
   const $ = (id) => document.getElementById(id);
   const S = Game.S;
-  const TIPS = ['Punch trees for logs, then craft a Workbench.', 'Night brings zombies — build a shelter before dark.', 'Crystals glow in the dark: great for lighting caves.', 'Right-click a Chest to open it. Mine it to get your stuff back.', 'Better pickaxes unlock rarer ores. Copper → Iron → Gold → Crystal.', 'Press Tab to see everyone in your world.', 'Furnaces smelt ore into bars. Place one next to a Workbench.', 'Invite friends with your 5-letter room code!'];
+  const TIPS = ['Punch trees for logs, then craft a Workbench.', 'Night brings zombies — build a shelter before dark.', 'Crystals glow in the dark: great for lighting caves.', 'Right-click a Chest to open it. Mine it to get your stuff back.', 'Better pickaxes unlock rarer ores. Copper → Iron → Gold → Crystal.', 'Press Tab to see everyone in your world.', 'Furnaces smelt ore into bars. Place one next to a Workbench.', 'Invite friends with your 5-letter room code!', 'Craft a Bed and right-click it: set your spawn by day, skip the night by sleeping.'];
   const state = { invOpen: false, pauseOpen: false, held: null, drag: null, sel: -1, chatOpen: false, lastChat: 0, hotT: 0, clockT: 0 };
 
   // ------------------------------------------------------------ screens
@@ -234,6 +234,8 @@ const UI = (() => {
   function updateSel() { renderHotbar(); if (state.invOpen) renderInv(); }
   function chest() { if (S.chest) { if (!state.invOpen) openInventory(); else renderInv(); } else if (state.invOpen) renderInv(); }
   function dead(by) { $('death-by').textContent = `Slain by a ${by}`; $('death').classList.add('on'); closeModals(); }
+  function sleeping(v) { $('sleepbar').classList.toggle('on', !!v); }
+  $('wake-btn').onclick = () => { S.sleeping = false; sleeping(false); Game.send({ t: 'wake' }); };
   function respawned() { $('death').classList.remove('on'); }
 
   // touch controls
@@ -250,5 +252,5 @@ const UI = (() => {
   const q = new URLSearchParams(location.search); if (q.get('server')) { Settings.d.server = q.get('server'); Settings.save(); }
   if (q.get('room')) { go('worlds'); $('join-code').value = q.get('room').toUpperCase(); }
   addEventListener('beforeunload', () => {});
-  return { go, err, showLoading, hideLoading, enter, left, updateInv, updateSel, updateStat, updatePlayers, updateProg, chat: (n, m, id) => addMsg(`<b>${esc(n)}</b>: ${esc(m)}`), sys: (m) => addMsg(esc(m), 'sys'), toast, dead, respawned, chest, crafted: (id) => toast('Crafted ' + itemName(id)), hostSettings: () => { if (state.pauseOpen) buildPause(); }, reconnecting: (v) => $('reconnect').classList.toggle('on', v), error: err, typing, modalOpen, closeModals, toggleInventory, openInventory, escape, openChat, togglePlayers, frame };
+  return { sleeping, go, err, showLoading, hideLoading, enter, left, updateInv, updateSel, updateStat, updatePlayers, updateProg, chat: (n, m, id) => addMsg(`<b>${esc(n)}</b>: ${esc(m)}`), sys: (m) => addMsg(esc(m), 'sys'), toast, dead, respawned, chest, crafted: (id) => toast('Crafted ' + itemName(id)), hostSettings: () => { if (state.pauseOpen) buildPause(); }, reconnecting: (v) => $('reconnect').classList.toggle('on', v), error: err, typing, modalOpen, closeModals, toggleInventory, openInventory, escape, openChat, togglePlayers, frame };
 })();

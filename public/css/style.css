@@ -69,3 +69,5 @@ body.touch #plist{right:auto;left:50%;transform:translateX(-50%);flex-direction:
 
 #rtabs{display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:4px;scrollbar-width:thin}#rtabs button{flex:none;padding:4px 9px;font-size:12px;border-radius:6px;background:var(--bg2,#2a2d3a);color:var(--mu,#aab);border:2px solid var(--bd,#444)}#rtabs button.on{border-color:var(--ac2,#f0c040);color:#fff}.sortb{margin-left:auto;padding:4px 12px;font-size:12px}
 #recipes{max-height:330px}
+
+#sleepbar{display:none;position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:30;background:rgba(10,14,40,.88);border:2px solid var(--bd,#446);border-radius:10px;padding:8px 14px;color:#cfd8ff;font-size:13px;align-items:center;gap:12px}#sleepbar.on{display:flex}#sleepbar button{padding:4px 12px;font-size:12px}
