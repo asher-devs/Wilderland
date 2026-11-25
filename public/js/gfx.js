@@ -55,7 +55,7 @@ const Gfx = (() => {
       }
     },
     [T.DIRT]: paintDirt,
-    [T.STONE]: paintStone,
+    [T.STONE](g, r) { paintStone(g, r); }, // (not `paintStone` directly: the atlas passes the variant number as 3rd arg, which was being read as the base colour -> black)
     [T.LOG](g, r) {
       for (let x = 0; x < 16; x++) { const edge = x < 2 || x > 13, stripe = x % 4 === 1; for (let y = 0; y < 16; y++) pixel(g, x, y, col(edge ? [70, 44, 22] : stripe ? [88, 56, 28] : [122, 82, 42], (r() - 0.5) * 14)); }
       for (let i = 0; i < 3; i++) { const y = (r() * 14) | 0, x = 3 + ((r() * 9) | 0); pixel(g, x, y, col([60, 38, 20])); pixel(g, x + 1, y, col([60, 38, 20])); pixel(g, x, y + 1, col([60, 38, 20])); }
