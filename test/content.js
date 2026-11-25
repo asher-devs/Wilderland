@@ -90,6 +90,10 @@ for (const b of BLOCKS) {
   ok(n >= 0, `${b.name}: breakable with the right tool`);
   if (n >= 0 && b.drop >= 0 && b.dropP === 1) ok([...world.drops.values()].some((d) => d.item === b.drop), `${b.name}: drops ${ITEMS[b.drop].name}`);
 }
+// regression: chopping a tree with bare hands while standing still must not lose progress (idle clients send few movement packets)
+clear(); world.setTile(tx, ty, T.LOG); p.inv.fill(null); p.lastMv = Date.now() - 5000;
+let chopped = -1; for (let i = 0; i < 60 && chopped < 0; i++) { world.onMine(p, { x: tx, y: ty }); if (p.mine) p.mine.last -= 100; p.lastMv = Date.now() - 5000; world.step(0.05); if (world.get(tx, ty) === T.AIR) chopped = i; }
+ok(chopped >= 0, 'bare-hand tree chopping completes while the player stands still');
 // durability
 clear(); world.setTile(tx, ty, T.STONE); give(I.WOOD_PICK); const d0 = p.inv[0][2]; mine(tx, ty); ok(p.inv[0] && p.inv[0][2] < d0, 'mining wears the tool down');
 // placement

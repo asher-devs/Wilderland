@@ -451,7 +451,8 @@ class World {
       if (p.invul > 0) p.invul -= dt;
       if (p.dead) { p.deadT -= dt; if (p.deadT <= 0) this.respawn(p); continue; }
       p.regen += dt; if (p.regen > 4 && p.hp < p.maxhp) { p.hp = Math.min(p.maxhp, p.hp + 3 * dt); p.statDirty = true; }
-      if (Date.now() - p.lastMv > 800) p.mine = null;
+      // drop mining progress only if the client stopped sending 'mine' (NOT when the player simply stands still: idle clients send few 'mv' packets)
+      if (p.mine && Date.now() - p.mine.last > 800) p.mine = null;
     }
     // spawning
     this.spawnT -= dt;
