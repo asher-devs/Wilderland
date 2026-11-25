@@ -24,8 +24,9 @@ const Game = (() => {
   };
   const keys = new Set();
   const solid = (x, y) => DEFS.SOLID[get(x, y)] === 1;
+  const coll = (x, y) => DEFS.COLL[get(x, y)];
   function get(x, y) { if (x < 0 || x >= W || y >= H) return T.BEDROCK; if (y < 0) return T.AIR; return tiles[y * W + x]; }
-  function rescanTop(x) { let y = 0; while (y < H && !DEFS.SOLID[tiles[y * W + x]]) y++; top[x] = y; }
+  function rescanTop(x) { let y = 0; while (y < H && !DEFS.OPAQUE[tiles[y * W + x]]) y++; top[x] = y; }
   const url = () => {
     let s = (Settings.d.server || (window.WILDERLAND_CONFIG && window.WILDERLAND_CONFIG.server) || '').trim();
     if (!s) return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
@@ -129,7 +130,7 @@ const Game = (() => {
   function onMessage(m) {
     switch (m.t) {
       case 'snap': return onSnap(m);
-      case 'tiles': for (const [x, y, v] of m.c) { tiles[y * W + x] = v; if (DEFS.SOLID[v]) { if (y < top[x]) top[x] = y; } else if (y === top[x]) rescanTop(x); } return;
+      case 'tiles': for (const [x, y, v] of m.c) { tiles[y * W + x] = v; if (DEFS.OPAQUE[v]) { if (y < top[x]) top[x] = y; } else if (y === top[x]) rescanTop(x); } return;
       case 'inv': S.inv = m.inv; S.eq = m.eq; UI.updateInv(); return;
       case 'stat': { const lost = m.hp < S.hp; S.hp = m.hp; S.maxhp = m.maxhp; S.def = m.def; UI.updateStat(lost); return; }
       case 'plist': S.plist = m.p; for (const q of m.p) { const e = S.players.get(q.id); if (e && q.look) e.look = Gfx.playerLook(q.look); } S._myLook = null; UI.updatePlayers(); return;
@@ -137,7 +138,7 @@ const Game = (() => {
       case 'sys': UI.sys(m.m); if (/joined|rejoined/.test(m.m)) Sound.play('join'); else if (/disconnected|removed/.test(m.m)) Sound.play('leave'); if (/Dawn breaks/.test(m.m)) Sound.play('dawn'); return;
       case 'toast': UI.toast(m.m); return;
       case 'mp': S.mineProg = m.no ? null : { x: m.x, y: m.y, p: m.p, t: performance.now() };
-        if (m.no && performance.now() - (S.noToolT || 0) > 900) { S.noToolT = performance.now(); const b = BLOCKS[get(m.x, m.y)]; const names = ['', 'a pickaxe', 'a Stone pickaxe', 'a Copper pickaxe', 'an Iron pickaxe', 'a Crystal pickaxe']; UI.toast(`${b ? b.name : 'This'} needs ${names[Math.min(5, (b && b.tier) || 1)] || 'a better tool'} or better`, 1400); Sound.play('clink'); S.shake = Math.max(S.shake, 0.08); for (let i = 0; i < 4; i++) part(m.x + 0.5, m.y + 0.5, (Math.random() - 0.5) * 5, -Math.random() * 3, 0.4, [255, 230, 150], 2); } return;
+        if (m.no && performance.now() - (S.noToolT || 0) > 900) { S.noToolT = performance.now(); UI.toast(DEFS.needText(get(m.x, m.y)), 1700); Sound.play('clink'); S.shake = Math.max(S.shake, 0.08); for (let i = 0; i < 4; i++) part(m.x + 0.5, m.y + 0.5, (Math.random() - 0.5) * 5, -Math.random() * 3, 0.4, [255, 230, 150], 2); } return;
       case 'kb': if (S.me) { S.me.vx = m.vx; S.me.vy = m.vy; } return;
       case 'tp': if (S.me) { S.me.x = m.x; S.me.y = m.y; S.me.vx = S.me.vy = 0; } return;
       case 'dead': S.dead = true; S.act.active = false; UI.dead(m.by); Sound.play('die'); return;
@@ -181,7 +182,7 @@ const Game = (() => {
         else if (DEFS.LEAF[v]) for (let i = 0; i < 10; i++) part(x, y, (Math.random() - 0.5) * 5, -Math.random() * 2, 1.2, [70 + Math.random() * 60, 160, 60], 3, 0.25);
         else for (let i = 0; i < 4; i++) part(x, y, (Math.random() - 0.5) * 3, -Math.random() * 1.5, 0.7, Gfx.avg(v).map((c) => c + 25), 4, -0.1);
         break; }
-      case 'tree': { Sound.play('treefall'); S.falling.push({ x, y, h: v.h, dir: v.dir, leaves: v.leaves, t: 0, thud: false }); break; }
+      case 'tree': { Sound.play('treefall'); S.falling.push({ x, y, lg: v.lg || T.LOG, h: v.h, dir: v.dir, leaves: v.leaves, t: 0, thud: false }); break; }
       case 'place': Sound.play('place', v); burst(x, y, v, 3, 0.4); break;
       case 'mobhit': Sound.play('mobhit'); S.texts.push({ x, y: y - 0.6, txt: String(v), life: 0.9, max: 0.9, c: '#ffd36a' }); for (let i = 0; i < 6; i++) part(x, y, (Math.random() - 0.5) * 6, -Math.random() * 5, 0.5, [255, 90, 70], 3); break;
       case 'mobdie': Sound.play('mobdie'); for (let i = 0; i < 16; i++) part(x, y, (Math.random() - 0.5) * 7, -Math.random() * 6, 0.7, [220, 220, 240], 4, 0.6); break;
@@ -252,7 +253,7 @@ const Game = (() => {
       m.vy = Math.min(C.MAXFALL, m.vy + C.GRAVITY * dt);
     }
     const preVy = m.vy, wasGround = m.onGround;
-    DEFS.moveBody(m, dt, solid);
+    DEFS.moveBody(m, dt, coll);
     if (m.onGround && !wasGround && preVy > 12) { Sound.play('land'); for (let i = 0; i < 6; i++) part(m.x, m.y + m.h, (Math.random() - 0.5) * 5, -Math.random() * 2, 0.4, [200, 190, 170], 3); }
     m.x = Math.max(1, Math.min(W - 1, m.x));
     if (m.y > H + 5) { m.y = 10; m.vy = 0; }
@@ -281,7 +282,8 @@ const Game = (() => {
       } else if (a.mode === 'place') {
         const id = get(tx, ty);
         if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
-        else if (a.edge && (id === T.BENCH || id === T.FURNACE) && inReach(tx, ty)) { UI.openInventory(); }
+        else if (a.edge && (id === T.BENCH || id === T.FURNACE || id === T.MASON) && inReach(tx, ty)) { UI.openInventory(); }
+        else if (it && it.kind === 'axe' && DEFS.STRIPPED[id] && inReach(tx, ty)) { if (now > placeT) { placeT = now + 350; send({ t: 'place', x: tx, y: ty }); acting = true; } }
         else if (it && it.block !== undefined) { if (now > placeT && inReach(tx, ty)) { placeT = now + 120; send({ t: 'place', x: tx, y: ty }); acting = true; } }
         else if (it && it.heal && now > useT) { useT = now + 350; send({ t: 'use' }); }
       }
@@ -364,7 +366,7 @@ const Game = (() => {
       const y = y0 + j;
       for (let i = 0; i < gw; i++) {
         const x = x0 + i, idx = j * gw + i, v = get(x, y); const sol = DEFS.SOLID[v] === 1;
-        let r = amb * 0.9, gg = amb, b = amb * 1.4; ATT[idx] = sol ? 0.74 : (DEFS.LEAF[v] ? 0.82 : 0.93);
+        let r = amb * 0.9, gg = amb, b = amb * 1.4; ATT[idx] = DEFS.CLEAR[v] ? 0.94 : sol ? 0.74 : (DEFS.LEAF[v] ? 0.82 : 0.93);
         if (x >= 0 && x < W) {
           if (y <= top[x]) { const k = sol ? 1 : 1; const lt = DEFS.LEAF[v] ? 0.78 : k; r = Math.max(r, tint[0] * lt); gg = Math.max(gg, tint[1] * lt); b = Math.max(b, tint[2] * lt); }
           const bl = BLOCKS[v] && BLOCKS[v].light;
@@ -401,7 +403,7 @@ const Game = (() => {
       for (let x = Math.max(0, x0); x <= Math.min(W - 1, x1); x++) {
         const v = tiles[y * W + x], sx = x * TS + ox, sy = y * TS + oy, sol = DEFS.SOLID[v] === 1, vr = hash2(x, y) & 3;
         const s = surf[x];
-        if (!sol && y > s) { const d = y - s, b = biome[x]; const bg = (b === 0 || b === 3 || b === 5) && d < 14 ? Gfx.BG.DIRT : b === 1 && d < 30 ? Gfx.BG.SAND : (b === 2 || (b === 4 && s < H * 0.3 - 24)) && d < 30 ? Gfx.BG.ICE : Gfx.BG.STONE; g.drawImage(A, bg * 16, vr * 16, 16, 16, sx, sy, TS, TS); }
+        if ((!sol || DEFS.CLEAR[v]) && y > s) { const d = y - s, b = biome[x]; const bg = (b === 0 || b === 3 || b === 5) && d < 14 ? Gfx.BG.DIRT : b === 1 && d < 30 ? Gfx.BG.SAND : (b === 2 || (b === 4 && s < H * 0.3 - 24)) && d < 30 ? Gfx.BG.ICE : Gfx.BG.STONE; g.drawImage(A, bg * 16, vr * 16, 16, 16, sx, sy, TS, TS); }
         if (v === T.AIR) continue;
         if (v === T.WATER) { water.push(x, y); continue; }
         if (DEFS.DECOR[v] || DEFS.LEAF[v]) {
@@ -415,10 +417,16 @@ const Game = (() => {
           else { g.drawImage(A, v * 16, tv * 16 + 8, 16, 8, sx, sy + TS / 2, TS, TS / 2); g.drawImage(A, v * 16, tv * 16, 16, 8, sx + sw, sy, TS, TS / 2); }
           continue;
         }
+        if (DEFS.SHAPE[v]) {
+          const sh = DEFS.SHAPE[v], wl = (q) => { const k = get(q, y); return DEFS.SOLID[k] === 1 || (DEFS.SHAPE[k] && DEFS.SHAPE[k].kind === 'wall'); };
+          Gfx.drawShape(g, v, sx, sy, TS, vr, sh.kind === 'wall' && wl(x - 1), sh.kind === 'wall' && wl(x + 1));
+          if (S.mineProg && S.mineProg.x === x && S.mineProg.y === y) { const st = Math.min(4, Math.floor(S.mineProg.p * 5)); g.drawImage(Gfx.cracks, st * 16, 0, 16, 16, sx, sy, TS, TS); }
+          continue;
+        }
         g.drawImage(A, v * 16, vr * 16, 16, 16, sx, sy, TS, TS);
         if (sol) {
-          if (v !== T.GRASS && v !== T.SNOW && !DEFS.SOLID[get(x, y - 1)]) { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(sx, sy, TS, u); }
-          if (!DEFS.SOLID[get(x, y + 1)]) { g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(sx, sy + TS - u, TS, u); }
+          if (v !== T.GRASS && v !== T.SNOW && !DEFS.CLEAR[v] && !DEFS.SOLID[get(x, y - 1)]) { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(sx, sy, TS, u); }
+          if (!DEFS.CLEAR[v] && !DEFS.SOLID[get(x, y + 1)]) { g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(sx, sy + TS - u, TS, u); }
         }
         if (S.mineProg && S.mineProg.x === x && S.mineProg.y === y) { const st = Math.min(4, Math.floor(S.mineProg.p * 5)); g.drawImage(Gfx.cracks, st * 16, 0, 16, 16, sx, sy, TS, TS); }
       }
@@ -434,7 +442,7 @@ const Game = (() => {
     for (let i = S.falling.length - 1; i >= 0; i--) {
       const f = S.falling[i]; f.t += (S.dt || 0.016); const k = Math.min(1, f.t / 1.15), ang = f.dir * (k * k * (Math.PI / 2) * 1.0) + (k > 0.9 ? f.dir * Math.sin((k - 0.9) * 30) * 0.03 : 0);
       g.save(); g.translate(Math.round(f.x * TS + ox), Math.round(f.y * TS + oy)); g.rotate(ang); g.imageSmoothingEnabled = false;
-      for (let q = 1; q <= f.h; q++) g.drawImage(A, T.LOG * 16, 0, 16, 16, -TS / 2, -q * TS, TS, TS);
+      for (let q = 1; q <= f.h; q++) g.drawImage(A, f.lg * 16, 0, 16, 16, -TS / 2, -q * TS, TS, TS);
       for (const [dx, dy, lt] of f.leaves) g.drawImage(A, lt * 16, 0, 16, 16, (dx - 0.5) * TS, dy * TS, TS, TS);
       g.restore();
       if (f.t >= 1.15 && !f.thud) { f.thud = true; Sound.play('thud'); S.shake = Math.max(S.shake, 0.12); for (const [dx, dy] of f.leaves.filter((_, j) => j % 3 === 0)) part(f.x + f.dir * (-dy) * 0.9 + dx * 0.1, f.y - 0.5, (Math.random() - 0.5) * 5, -Math.random() * 3, 1.2, [80 + Math.random() * 60, 170, 60], 3, 0.3); }
@@ -463,7 +471,7 @@ const Game = (() => {
     if (S.me && !S.dead && (S.act.active || (!S.act.touch && cursorPos.x))) {
       const aim = aimWorld(), tx = Math.floor(aim.x), ty = Math.floor(aim.y), ok = inReach(tx, ty); const sx = tx * TS + ox, sy = ty * TS + oy;
       const held = S.inv[S.sel], it = held && ITEMS[held[0]];
-      if (it && it.block !== undefined && ok && get(tx, ty) === T.AIR) { g.globalAlpha = 0.4; g.drawImage(Gfx.atlas, it.block * 16, 0, 16, 16, sx, sy, TS, TS); g.globalAlpha = 1; }
+      if (it && it.block !== undefined && ok && get(tx, ty) === T.AIR) { g.globalAlpha = 0.4; if (DEFS.SHAPE[it.block]) { const sh = DEFS.SHAPE[it.block]; const id2 = sh.kind === 'stairR' ? DEFS.SHAPE_OF[sh.base + (S.me.x < tx + 0.5 ? ':stairR' : ':stairL')] : it.block; Gfx.drawShape(g, id2, sx, sy, TS, 0, true, true); } else g.drawImage(Gfx.atlas, it.block * 16, 0, 16, 16, sx, sy, TS, TS); g.globalAlpha = 1; }
       g.strokeStyle = ok ? 'rgba(255,255,255,0.8)' : 'rgba(255,90,90,0.6)'; g.lineWidth = Math.max(1, u); g.strokeRect(sx + 0.5, sy + 0.5, TS - 1, TS - 1);
     }
     // names, hp bars, floating text

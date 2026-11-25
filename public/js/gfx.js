@@ -131,15 +131,128 @@ const Gfx = (() => {
     [BG.DIRT](g, r) { noiseFill(g, [70, 48, 34], 14, r); for (let i = 0; i < 5; i++) blob(g, (r() * 16) | 0, (r() * 16) | 0, 1, [56, 38, 26], r); },
   };
 
+  // ======== v1.2 building-block painters ========
+  const rect = (g, x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  /** running-bond brick wall: rows of height rh, bricks bw wide */
+  function bricks(g, r, base, mortar, rh = 4, bw = 8, vary = 18) {
+    rect(g, 0, 0, 16, 16, col(mortar));
+    for (let row = 0, y = 0; y < 16; row++, y += rh) {
+      const off = row % 2 ? bw / 2 : 0;
+      for (let x = -off; x < 16; x += bw) {
+        const x0 = Math.max(0, x + 1), x1 = Math.min(16, x + bw), tone = (r() - 0.5) * vary;
+        for (let yy = y + 1; yy < Math.min(16, y + rh); yy++) for (let xx = x0; xx < x1; xx++) pixel(g, xx, yy, col(base, tone + (r() - 0.5) * 8 + (yy === y + 1 ? 10 : 0)));
+      }
+    }
+  }
+  /** square tiles with grout */
+  function tiles(g, r, base, grout, n = 2, vary = 10) {
+    const s = 16 / n; rect(g, 0, 0, 16, 16, col(grout));
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const tone = (r() - 0.5) * vary; for (let y = 1; y < s; y++) for (let x = 1; x < s; x++) pixel(g, i * s + x, j * s + y, col(base, tone + (r() - 0.5) * 6 + (y === 1 || x === 1 ? 8 : 0))); }
+  }
+  function moss(g, r, amt) { for (let i = 0; i < amt; i++) { const x = (r() * 16) | 0, y = (r() * 16) | 0; pixel(g, x, y, col([70, 130, 50], (r() - 0.5) * 30)); if (r() < 0.6) pixel(g, Math.min(15, x + 1), y, col([92, 156, 60], (r() - 0.5) * 24)); if (r() < 0.4) pixel(g, x, Math.min(15, y + 1), col([52, 104, 44])); } }
+  function crack(g, r, n) { for (let k = 0; k < n; k++) { let x = (r() * 14) | 0, y = (r() * 14) | 0; for (let s = 0; s < 6; s++) { pixel(g, x, y, 'rgba(20,20,26,0.65)'); x = Math.min(15, Math.max(0, x + (r() < 0.5 ? 1 : 0))); y = Math.min(15, Math.max(0, y + (r() < 0.7 ? 1 : -1))); } } }
+  /** overlapping scales (roofing): rows of rounded shingles */
+  function scales(g, r, base, edge, rh = 4, w = 8) {
+    for (let row = 0; row * rh < 20; row++) {
+      const y0 = row * rh - 1, off = row % 2 ? w / 2 : 0;
+      for (let x = -off; x < 16 + w; x += w) {
+        const tone = (r() - 0.5) * 16;
+        for (let yy = 0; yy < rh + 1; yy++) for (let xx = 0; xx < w; xx++) {
+          const px = x + xx, py = y0 + yy; if (px < 0 || px > 15 || py < 0 || py > 15) continue;
+          const dx = xx - (w - 1) / 2, round = yy >= rh - 1 && Math.abs(dx) > (w / 2 - 1.2 - (yy - (rh - 1)) * 1.4);
+          if (round) continue;
+          pixel(g, px, py, yy >= rh - 1 ? col(edge, tone) : col(base, tone + (yy === 0 ? 12 : 0) + (r() - 0.5) * 8));
+        }
+      }
+    }
+  }
+  const GL = (g, base, a) => { g.fillStyle = `rgba(${base[0]},${base[1]},${base[2]},${a})`; g.fillRect(0, 0, 16, 16); };
+  const stoneMix = { // simple helper tones
+    cobble: [118, 120, 128], brick: [126, 128, 138],
+  };
+  Object.assign(painters, {
+    [T.COBBLE](g, r) { rect(g, 0, 0, 16, 16, col([62, 64, 72])); const rocks = [[0, 0, 6, 5], [6, 0, 5, 6], [11, 0, 5, 4], [0, 5, 5, 6], [5, 6, 6, 5], [11, 4, 5, 6], [0, 11, 7, 5], [7, 11, 5, 5], [12, 10, 4, 6]]; for (const [x, y, w, h] of rocks) { const tone = (r() - 0.5) * 26; for (let yy = y + 1; yy < y + h; yy++) for (let xx = x + 1; xx < x + w; xx++) pixel(g, xx, yy, col([124, 126, 136], tone + (r() - 0.5) * 12 + (yy === y + 1 ? 10 : 0))); } },
+    [T.STONE_BRICK](g, r) { bricks(g, r, [122, 124, 134], [70, 72, 82], 5, 8, 14); },
+    [T.MOSSY_COBBLE](g, r) { painters[T.COBBLE](g, r); moss(g, r, 26); },
+    [T.MOSSY_BRICK](g, r) { painters[T.STONE_BRICK](g, r); moss(g, r, 24); },
+    [T.CRACKED_BRICK](g, r) { painters[T.STONE_BRICK](g, r); crack(g, r, 3); },
+    [T.POLISHED_STONE](g, r) { noiseFill(g, [150, 154, 164], 8, r); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.35)'); rect(g, 0, 0, 1, 16, 'rgba(255,255,255,0.22)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.25)'); rect(g, 15, 0, 1, 16, 'rgba(0,0,0,0.18)'); line(g, 3, 12, 8, 7, 'rgba(255,255,255,0.18)'); },
+    [T.CHISELED_STONE](g, r) { noiseFill(g, [128, 132, 142], 10, r); rect(g, 1, 1, 14, 14, col([92, 96, 108])); rect(g, 2, 2, 12, 12, col([136, 140, 150])); rect(g, 4, 4, 8, 8, col([100, 104, 116])); rect(g, 5, 5, 6, 6, col([146, 150, 160])); rect(g, 7, 7, 2, 2, col([88, 92, 104])); },
+    [T.SLATE_BRICK](g, r) { bricks(g, r, [74, 80, 100], [38, 42, 56], 4, 8, 14); },
+    [T.SLATE_TILE](g, r) { tiles(g, r, [70, 76, 98], [34, 38, 52], 2, 12); rect(g, 2, 2, 5, 1, 'rgba(255,255,255,0.12)'); rect(g, 9, 9, 5, 1, 'rgba(255,255,255,0.12)'); },
+    [T.GRAVEL](g, r) { noiseFill(g, [128, 124, 120], 16, r); for (let i = 0; i < 26; i++) { const x = (r() * 15) | 0, y = (r() * 15) | 0, t = r(); const c = t < 0.33 ? [168, 162, 156] : t < 0.66 ? [96, 92, 90] : [150, 120, 96]; rect(g, x, y, 2, 2, col(c, (r() - 0.5) * 20)); pixel(g, x, y, col(c, 28)); } },
+    [T.COARSE_DIRT](g, r) { paintDirt(g, r); for (let i = 0; i < 12; i++) { const x = (r() * 15) | 0, y = (r() * 15) | 0; rect(g, x, y, 2, 2, col([140, 134, 126], (r() - 0.5) * 20)); } },
+    [T.MOSS](g, r) { noiseFill(g, [62, 112, 44], 24, r); for (let i = 0; i < 30; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([110, 170, 70], (r() - 0.5) * 30)); for (let i = 0; i < 8; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([36, 76, 34])); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.1)'); },
+    [T.COPPER_BLOCK](g, r) { noiseFill(g, [196, 108, 58], 12, r); rect(g, 0, 0, 16, 2, col([232, 150, 96])); rect(g, 0, 0, 2, 16, col([222, 136, 82])); rect(g, 0, 14, 16, 2, col([140, 72, 38])); rect(g, 14, 0, 2, 16, col([150, 78, 40])); rect(g, 4, 4, 8, 8, col([208, 120, 66])); rect(g, 4, 4, 8, 1, col([240, 168, 112])); },
+    [T.IRON_BLOCK](g, r) { noiseFill(g, [186, 192, 204], 10, r); rect(g, 0, 0, 16, 2, col([232, 236, 246])); rect(g, 0, 0, 2, 16, col([220, 224, 236])); rect(g, 0, 14, 16, 2, col([116, 122, 138])); rect(g, 14, 0, 2, 16, col([126, 132, 148])); rect(g, 4, 4, 8, 8, col([170, 176, 190])); rect(g, 4, 4, 8, 1, col([226, 230, 240])); },
+    [T.GOLD_BLOCK](g, r) { noiseFill(g, [244, 200, 56], 12, r); rect(g, 0, 0, 16, 2, col([255, 238, 140])); rect(g, 0, 0, 2, 16, col([255, 224, 100])); rect(g, 0, 14, 16, 2, col([186, 138, 24])); rect(g, 14, 0, 2, 16, col([196, 148, 30])); rect(g, 4, 4, 8, 8, col([250, 212, 70])); pixel(g, 6, 6, '#fff7c0'); pixel(g, 7, 6, '#fff7c0'); },
+    [T.IRON_PLATE](g, r) { noiseFill(g, [150, 156, 170], 8, r); rect(g, 0, 7, 16, 2, col([108, 114, 128])); rect(g, 7, 0, 2, 16, col([108, 114, 128])); for (const [x, y] of [[1, 1], [13, 1], [1, 13], [13, 13], [3, 5], [11, 5], [3, 10], [11, 10]]) { pixel(g, x, y, col([214, 220, 232])); pixel(g, x + 1, y + 1, col([80, 84, 98])); } rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.3)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.3)'); },
+    [T.VERDIGRIS](g, r) { noiseFill(g, [72, 170, 148], 14, r); for (let i = 0; i < 5; i++) blob(g, (r() * 16) | 0, (r() * 16) | 0, 1 + ((r() * 2) | 0), [196, 110, 66], r); for (let i = 0; i < 12; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([130, 220, 190])); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.2)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.25)'); for (let x = 0; x < 16; x += 4) rect(g, x, 0, 1, 16, 'rgba(0,0,0,0.12)'); },
+    [T.IRON_GRATE](g) { g.clearRect(0, 0, 16, 16); rect(g, 0, 0, 16, 2, col([120, 126, 140])); rect(g, 0, 14, 16, 2, col([90, 96, 110])); rect(g, 0, 0, 2, 16, col([130, 136, 150])); rect(g, 14, 0, 2, 16, col([90, 96, 110])); for (const x of [5, 8, 11]) { rect(g, x, 2, 1, 12, col([170, 176, 190])); } rect(g, 2, 7, 12, 1, col([146, 152, 166])); },
+    [T.CRYSTAL_BLOCK](g, r) { noiseFill(g, [96, 164, 230], 14, r); poly(g, [[8, 1], [14, 6], [11, 14], [5, 14], [2, 6]], col([150, 214, 255])); poly(g, [[8, 1], [14, 6], [8, 8]], col([210, 244, 255])); poly(g, [[8, 8], [11, 14], [5, 14]], col([80, 140, 220])); line(g, 8, 1, 8, 14, col([230, 250, 255, 0])); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.4)'); rect(g, 0, 15, 16, 1, 'rgba(20,40,120,0.4)'); pixel(g, 6, 5, '#fff'); },
+    [T.CRYSTAL_LAMP](g, r) { rect(g, 0, 0, 16, 16, col([70, 76, 96])); rect(g, 2, 2, 12, 12, col([150, 214, 255])); rect(g, 4, 4, 8, 8, col([226, 246, 255])); rect(g, 6, 6, 4, 4, '#fff'); rect(g, 7, 2, 2, 12, col([70, 76, 96])); rect(g, 2, 7, 12, 2, col([70, 76, 96])); rect(g, 0, 0, 16, 1, col([110, 118, 140])); },
+    [T.CLAY](g, r) { noiseFill(g, [160, 166, 182], 12, r); for (let i = 0; i < 6; i++) blob(g, (r() * 16) | 0, (r() * 16) | 0, 1, [142, 148, 166], r); for (let i = 0; i < 8; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([190, 196, 210])); },
+    [T.BRICK](g, r) { bricks(g, r, [172, 76, 58], [196, 190, 176], 4, 8, 22); },
+    [T.TERRACOTTA](g, r) { noiseFill(g, [200, 112, 70], 14, r); for (let i = 0; i < 6; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([226, 140, 92])); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.15)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.18)'); },
+    [T.TERRA_TILE](g, r) { tiles(g, r, [206, 122, 78], [128, 70, 44], 4, 18); for (let i = 0; i < 4; i++) { const x = (r() * 3 | 0) * 4 + 2, y = (r() * 3 | 0) * 4 + 2; pixel(g, x, y, col([240, 170, 120])); } },
+    [T.ADOBE](g, r) { noiseFill(g, [214, 176, 124], 14, r); for (const y of [5, 10]) rect(g, 0, y, 16, 1, 'rgba(120,84,48,0.35)'); for (const [x, y] of [[4, 0], [11, 5], [3, 10]]) rect(g, x, y, 1, 5, 'rgba(120,84,48,0.3)'); for (let i = 0; i < 14; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([236, 204, 156])); },
+    [T.MUD_BRICK](g, r) { bricks(g, r, [112, 84, 54], [64, 48, 32], 4, 8, 22); for (let i = 0; i < 12; i++) line(g, (r() * 14) | 0, (r() * 14) | 0, (r() * 14) | 0, (r() * 14) | 0, 'rgba(190,160,100,0.25)'); },
+    [T.GLAZED_TILE](g, r) { tiles(g, r, [236, 240, 246], [90, 130, 190], 2, 4); for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const cx = i * 8 + 4, cy = j * 8 + 4; pixel(g, cx, cy, col([60, 110, 200])); pixel(g, cx - 1, cy, col([90, 140, 220])); pixel(g, cx + 1, cy, col([90, 140, 220])); pixel(g, cx, cy - 1, col([90, 140, 220])); pixel(g, cx, cy + 1, col([90, 140, 220])); } },
+    [T.ROOF_TILE](g, r) { scales(g, r, [196, 92, 60], [140, 58, 40], 4, 8); },
+    [T.SLATE_ROOF](g, r) { scales(g, r, [88, 96, 124], [52, 58, 80], 4, 4); },
+    [T.THATCH](g, r) { noiseFill(g, [214, 182, 84], 16, r); for (let i = 0; i < 16; i++) line(g, (r() * 16) | 0, 0, ((r() * 16) | 0), 15, col([168, 132, 56], (r() - 0.5) * 20)); for (let y = 3; y < 16; y += 5) rect(g, 0, y, 16, 1, 'rgba(110,80,30,0.35)'); for (let i = 0; i < 12; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([244, 224, 140])); },
+    [T.SHINGLE](g, r) { for (let row = 0; row < 4; row++) for (let i = 0; i < 4; i++) { const x = i * 4 + (row % 2 ? 2 : 0) - (row % 2 ? 0 : 0), tone = (r() - 0.5) * 26; for (let y = 0; y < 4; y++) for (let xx = 0; xx < 4; xx++) { const px = (x + xx + 16) % 16; pixel(g, px, row * 4 + y, y === 3 ? col([84, 54, 28]) : xx === 0 ? col([100, 66, 34]) : col([152, 106, 58], tone + (y === 0 ? 8 : 0))); } } },
+    [T.GLASS](g) { g.clearRect(0, 0, 16, 16); GL(g, [190, 232, 250], 0.2); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.6)'); rect(g, 0, 0, 1, 16, 'rgba(255,255,255,0.5)'); rect(g, 15, 0, 1, 16, 'rgba(120,170,200,0.5)'); rect(g, 0, 15, 16, 1, 'rgba(120,170,200,0.5)'); line(g, 3, 6, 6, 3, 'rgba(255,255,255,0.8)'); line(g, 4, 9, 9, 4, 'rgba(255,255,255,0.45)'); },
+    [T.FRAMED_GLASS](g) { g.clearRect(0, 0, 16, 16); GL(g, [190, 232, 250], 0.22); const w = col([150, 100, 52]), d = col([100, 64, 30]); rect(g, 0, 0, 16, 2, w); rect(g, 0, 14, 16, 2, d); rect(g, 0, 0, 2, 16, w); rect(g, 14, 0, 2, 16, d); rect(g, 7, 2, 2, 12, w); rect(g, 2, 7, 12, 2, w); line(g, 3, 6, 5, 4, 'rgba(255,255,255,0.8)'); line(g, 10, 12, 12, 10, 'rgba(255,255,255,0.7)'); },
+    [T.STAINED_GLASS](g) { g.clearRect(0, 0, 16, 16); const cols = [[230, 70, 80, 0.55], [250, 200, 60, 0.55], [70, 150, 230, 0.55], [80, 200, 120, 0.55]]; for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { const c = cols[(i + j * 2 + (i > 1 ? 1 : 0)) % 4]; g.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${c[3]})`; g.fillRect(i * 4, j * 4, 4, 4); } g.fillStyle = col([54, 50, 60]); for (let k = 0; k <= 16; k += 4) { g.fillRect(Math.min(15, k), 0, 1, 16); g.fillRect(0, Math.min(15, k), 16, 1); } rect(g, 1, 1, 1, 1, 'rgba(255,255,255,0.8)'); rect(g, 9, 5, 1, 1, 'rgba(255,255,255,0.7)'); },
+    [T.TINTED_GLASS](g) { g.clearRect(0, 0, 16, 16); GL(g, [30, 40, 56], 0.62); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.3)'); rect(g, 0, 0, 1, 16, 'rgba(255,255,255,0.2)'); line(g, 3, 7, 7, 3, 'rgba(255,255,255,0.35)'); rect(g, 15, 0, 1, 16, 'rgba(0,0,0,0.4)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.4)'); },
+    [T.SANDSTONE_BRICK](g, r) { bricks(g, r, [214, 182, 118], [160, 124, 72], 5, 8, 14); },
+    [T.SMOOTH_SANDSTONE](g, r) { noiseFill(g, [226, 198, 138], 6, r); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.3)'); rect(g, 0, 15, 16, 1, 'rgba(150,110,60,0.35)'); rect(g, 0, 7, 16, 1, 'rgba(180,140,84,0.25)'); },
+    [T.CHISELED_SANDSTONE](g, r) { noiseFill(g, [212, 180, 116], 10, r); rect(g, 1, 1, 14, 14, col([166, 130, 78])); rect(g, 2, 2, 12, 12, col([222, 192, 132])); for (const [x, y] of [[7, 4], [6, 5], [8, 5], [5, 6], [9, 6], [7, 6], [6, 7], [8, 7], [7, 8], [7, 9], [6, 10], [8, 10]]) pixel(g, x, y, col([156, 118, 66])); rect(g, 4, 11, 8, 1, col([156, 118, 66])); },
+    [T.SNOW_BRICK](g, r) { bricks(g, r, [244, 248, 255], [170, 196, 224], 4, 8, 8); },
+    [T.ICE_BRICK](g, r) { bricks(g, r, [150, 214, 246], [96, 156, 206], 5, 8, 14); for (let i = 0; i < 3; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, '#fff'); },
+    [T.PINE_LOG](g, r) { for (let x = 0; x < 16; x++) { const edge = x < 2 || x > 13, stripe = x % 5 === 2; for (let y = 0; y < 16; y++) pixel(g, x, y, col(edge ? [52, 34, 24] : stripe ? [78, 52, 36] : [104, 70, 46], (r() - 0.5) * 12)); } for (let i = 0; i < 4; i++) { const y = (r() * 14) | 0, x = 3 + ((r() * 9) | 0); rect(g, x, y, 2, 1, col([44, 28, 20])); } },
+    [T.MAPLE_LOG](g, r) { for (let x = 0; x < 16; x++) { const edge = x < 2 || x > 13, stripe = x % 3 === 1; for (let y = 0; y < 16; y++) pixel(g, x, y, col(edge ? [92, 72, 62] : stripe ? [136, 108, 92] : [168, 138, 118], (r() - 0.5) * 12)); } for (let i = 0; i < 5; i++) { const y = (r() * 14) | 0, x = 3 + ((r() * 9) | 0); rect(g, x, y, 1, 3, col([60, 46, 38])); } },
+    [T.WILLOW_LOG](g, r) { for (let x = 0; x < 16; x++) { const edge = x < 3 || x > 12; for (let y = 0; y < 16; y++) pixel(g, x, y, col(edge ? [52, 50, 38] : [86, 84, 60], (r() - 0.5) * 14 + ((x + ((y / 4) | 0)) % 3 === 0 ? -14 : 0))); } for (let i = 0; i < 10; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([80, 124, 56])); },
+    [T.STRIPPED_OAK](g, r) { noiseFill(g, [190, 146, 86], 8, r); for (let x = 0; x < 16; x += 4) rect(g, x, 0, 1, 16, 'rgba(120,80,40,0.35)'); rect(g, 0, 0, 2, 16, col([150, 108, 58])); rect(g, 14, 0, 2, 16, col([150, 108, 58])); },
+    [T.STRIPPED_PINE](g, r) { noiseFill(g, [170, 122, 84], 8, r); for (let x = 1; x < 16; x += 5) rect(g, x, 0, 1, 16, 'rgba(100,60,36,0.4)'); rect(g, 0, 0, 2, 16, col([130, 90, 60])); rect(g, 14, 0, 2, 16, col([130, 90, 60])); },
+    [T.STRIPPED_MAPLE](g, r) { noiseFill(g, [222, 190, 160], 8, r); for (let x = 2; x < 16; x += 3) rect(g, x, 0, 1, 16, 'rgba(150,110,80,0.35)'); rect(g, 0, 0, 2, 16, col([188, 150, 120])); rect(g, 14, 0, 2, 16, col([188, 150, 120])); },
+    [T.STRIPPED_WILLOW](g, r) { noiseFill(g, [150, 150, 106], 8, r); for (let x = 1; x < 16; x += 4) rect(g, x, 0, 1, 16, 'rgba(70,74,44,0.4)'); rect(g, 0, 0, 2, 16, col([112, 112, 76])); rect(g, 14, 0, 2, 16, col([112, 112, 76])); },
+    [T.PINE_PLANKS](g, r) { for (let col2 = 0; col2 < 4; col2++) { const x0 = col2 * 4; for (let x = 0; x < 4; x++) for (let y = 0; y < 16; y++) pixel(g, x0 + x, y, x === 3 ? col([92, 60, 40]) : col([150, 108, 74], (r() - 0.5) * 14 + (x === 0 ? 6 : 0))); const jy = (col2 * 7 + 3) % 16; for (let x = 0; x < 3; x++) pixel(g, x0 + x, jy, col([104, 70, 46])); } },
+    [T.MAPLE_PLANKS](g, r) { for (let row = 0; row < 2; row++) { const y0 = row * 8; for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) pixel(g, x, y0 + y, y === 7 ? col([150, 116, 88]) : col([226, 190, 150], (r() - 0.5) * 12 + (y === 0 ? 8 : 0))); const jx = row ? 4 : 11; for (let y = 0; y < 7; y++) pixel(g, jx, y0 + y, col([176, 140, 106])); for (let i = 0; i < 3; i++) pixel(g, (r() * 16) | 0, y0 + 2 + ((r() * 4) | 0), col([190, 150, 110])); } },
+    [T.WILLOW_PLANKS](g, r) { for (let row = 0; row < 4; row++) { const y0 = row * 4; for (let y = 0; y < 4; y++) for (let x = 0; x < 16; x++) pixel(g, x, y0 + y, y === 3 ? col([62, 64, 44]) : col([132, 134, 92], (r() - 0.5) * 16 + (y === 0 ? 6 : 0))); const jx = (row * 7 + 2) % 16; for (let y = 0; y < 3; y++) pixel(g, jx, y0 + y, col([82, 84, 56])); } for (let i = 0; i < 5; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([110, 150, 76])); },
+    [T.PARQUET](g, r) { for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { const horiz = (i + j) % 2 === 0, tone = (r() - 0.5) * 12, base = (i + j) % 4 < 2 ? [186, 136, 74] : [152, 108, 62]; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { const edge = horiz ? y === 3 : x === 3; pixel(g, i * 4 + x, j * 4 + y, edge ? col([84, 54, 28]) : col(base, tone + ((horiz ? y : x) === 1 ? 8 : 0))); } } },
+    [T.BOOKSHELF](g, r) { rect(g, 0, 0, 16, 16, col([120, 80, 40])); rect(g, 1, 1, 14, 6, col([62, 40, 22])); rect(g, 1, 9, 14, 6, col([62, 40, 22])); const bc = [[200, 60, 60], [60, 120, 200], [230, 190, 70], [80, 170, 100], [160, 90, 200], [220, 130, 60]]; for (const y0 of [1, 9]) { let x = 1; while (x < 14) { const w = 2 + ((r() * 2) | 0), c = bc[(r() * 6) | 0], h = 5 - ((r() * 2) | 0); rect(g, x, y0 + 6 - h, w, h, col(c)); rect(g, x, y0 + 6 - h, 1, h, col(c, 30)); x += w; } } rect(g, 0, 7, 16, 2, col([150, 104, 54])); rect(g, 0, 0, 16, 1, col([170, 120, 62])); },
+    [T.BEAM](g, r) { rect(g, 0, 0, 16, 16, col([92, 62, 34])); rect(g, 3, 0, 10, 16, col([128, 88, 48])); for (let x = 3; x < 13; x += 3) rect(g, x, 0, 1, 16, col([108, 72, 38])); rect(g, 3, 0, 1, 16, col([164, 118, 66])); rect(g, 0, 7, 16, 3, col([116, 78, 42])); rect(g, 0, 7, 16, 1, col([150, 106, 58])); pixel(g, 7, 8, col([60, 40, 22])); pixel(g, 9, 8, col([60, 40, 22])); },
+    [T.HAY](g, r) { noiseFill(g, [222, 188, 80], 18, r); for (let i = 0; i < 22; i++) line(g, (r() * 16) | 0, (r() * 16) | 0, (r() * 16) | 0, (r() * 16) | 0, col([196, 152, 52], (r() - 0.5) * 30)); rect(g, 0, 4, 16, 2, col([140, 90, 40])); rect(g, 0, 10, 16, 2, col([140, 90, 40])); rect(g, 0, 4, 16, 1, col([170, 118, 56])); rect(g, 0, 10, 16, 1, col([170, 118, 56])); },
+    [T.CHECKER](g) { for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { const dark = (i + j) % 2; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) pixel(g, i * 4 + x, j * 4 + y, dark ? col([46, 48, 58], y === 0 ? 10 : 0) : col([232, 234, 240], y === 0 ? 12 : -(x === 3 || y === 3 ? 18 : 0))); } },
+    [T.MARBLE](g, r) { noiseFill(g, [236, 238, 244], 6, r); for (let k = 0; k < 3; k++) { let x = (r() * 16) | 0, y = 0; for (let s = 0; s < 16; s++) { pixel(g, x, y, col([150, 156, 176], (r() - 0.5) * 20)); if (r() < 0.4) pixel(g, Math.min(15, x + 1), y, col([196, 200, 214])); x = Math.max(0, Math.min(15, x + ((r() * 3) | 0) - 1)); y++; } } rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.5)'); rect(g, 0, 15, 16, 1, 'rgba(0,0,0,0.15)'); },
+    [T.BASALT](g, r) { noiseFill(g, [58, 60, 70], 10, r); for (let x = 0; x < 16; x += 4) rect(g, x, 0, 1, 16, 'rgba(0,0,0,0.35)'); for (let i = 0; i < 8; i++) pixel(g, (r() * 16) | 0, (r() * 16) | 0, col([98, 100, 116])); rect(g, 0, 0, 16, 1, 'rgba(255,255,255,0.14)'); },
+    [T.MASON](g) { rect(g, 1, 8, 3, 8, col([120, 78, 38])); rect(g, 12, 8, 3, 8, col([120, 78, 38])); rect(g, 0, 5, 16, 4, col([142, 146, 158])); rect(g, 0, 5, 16, 1, col([196, 200, 212])); rect(g, 0, 9, 16, 1, col([92, 96, 108])); rect(g, 3, 1, 5, 4, col([176, 180, 192])); rect(g, 3, 1, 5, 1, col([220, 224, 234])); rect(g, 9, 2, 4, 3, col([110, 114, 128])); rect(g, 10, 3, 1, 2, col([60, 62, 70])); rect(g, 4, 12, 8, 2, col([100, 64, 30])); },
+    [T.LANTERN](g) { rect(g, 7, 0, 2, 3, col([60, 62, 72])); rect(g, 4, 3, 8, 2, col([70, 72, 84])); rect(g, 4, 5, 8, 8, col([40, 44, 56])); rect(g, 5, 6, 6, 6, col([255, 200, 90])); rect(g, 6, 7, 4, 4, col([255, 240, 170])); rect(g, 7, 8, 2, 2, '#fff'); rect(g, 7, 5, 2, 8, col([40, 44, 56])); rect(g, 4, 13, 8, 2, col([70, 72, 84])); rect(g, 5, 15, 6, 1, col([50, 52, 62])); },
+  });
+
   function buildAtlas() {
-    atlas = mk(48 * TS, VARS * TS); atlasCtx = atlas.getContext('2d');
+    atlas = mk(256 * TS, VARS * TS); atlasCtx = atlas.getContext('2d');
     for (const id of Object.keys(painters)) for (let v = 0; v < VARS; v++) {
       const c = mk(TS, TS), g = c.getContext('2d'); painters[id](g, rng(+id * 977 + v * 131 + 7), v);
       atlasCtx.drawImage(c, id * TS, v * TS);
       if (v === 0) { const d = g.getImageData(0, 0, TS, TS).data; let rr = 0, gg = 0, bb = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { rr += d[i]; gg += d[i + 1]; bb += d[i + 2]; n++; } avg[id] = n ? [rr / n | 0, gg / n | 0, bb / n | 0] : [128, 128, 128]; }
     }
+    for (const k in DEFS.SHAPE) avg[k] = avg[DEFS.SHAPE[k].base] || [128, 128, 128];
     cracks = mk(TS * 5, TS); const cg = cracks.getContext('2d'); const r = rng(99);
     for (let s = 0; s < 5; s++) { cg.save(); cg.translate(s * TS, 0); const n = 3 + s * 3; for (let k = 0; k < n; k++) { let x = 8 + ((r() - 0.5) * 6 | 0), y = 8 + ((r() - 0.5) * 6 | 0), a = r() * 6.28; for (let j = 0; j < 3 + s; j++) { pixel(cg, Math.max(0, Math.min(15, x | 0)), Math.max(0, Math.min(15, y | 0)), 'rgba(0,0,0,0.75)'); x += Math.cos(a); y += Math.sin(a); a += (r() - 0.5); } } cg.restore(); }
+  }
+
+
+  /** draw a slab / stair / wall tile (id) from the base block's atlas art. dx,dy = top-left px, sz = tile px, v = texture variant. armL/armR = wall connects to neighbours */
+  function drawShape(g, id, dx, dy, sz, v, armL, armR) {
+    const sh = DEFS.SHAPE[id], k = sz / 16, sx = sh.base * TS, sy = v * TS, A = atlas;
+    const part = (x0, y0, w, h) => g.drawImage(A, sx + x0, sy + y0, w, h, dx + x0 * k, dy + y0 * k, w * k, h * k);
+    if (sh.kind === 'slab') part(0, 8, 16, 8);
+    else if (sh.kind === 'stairR') { part(0, 8, 16, 8); part(8, 0, 8, 8); }
+    else if (sh.kind === 'stairL') { part(0, 8, 16, 8); part(0, 0, 8, 8); }
+    else { part(4, 0, 8, 16); if (armL) part(0, 3, 4, 8); if (armR) part(12, 3, 4, 8); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(dx + 11 * k, dy, k, sz); g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(dx + 4 * k, dy, k, sz); }
   }
 
   // ---- item icons
@@ -147,7 +260,7 @@ const Gfx = (() => {
   const iconCache = {}, iconURLs = {};
   function paintIcon(g, id) {
     const it = ITEMS[id], r = rng(id * 31 + 5);
-    if (it.block !== undefined) { g.drawImage(atlas, it.block * TS, 0, TS, TS, 0, 0, TS, TS); return; }
+    if (it.block !== undefined) { if (DEFS.SHAPE[it.block]) drawShape(g, it.block, 0, 0, TS, 0, true, true); else g.drawImage(atlas, it.block * TS, 0, TS, TS, 0, 0, TS, TS); return; }
     const hand = [128, 86, 44];
     if (it.kind) {
       const [c, hl] = TIER[it.tier];
@@ -157,6 +270,9 @@ const Gfx = (() => {
         pixel(g, 14, 2, col(hl)); pixel(g, 15, 1, col(hl));
         line(g, 4, 8, 8, 12, col([210, 170, 60])); line(g, 5, 8, 8, 11, col([160, 120, 40]));
         if (it.tier === 5) for (let i = 0; i < 4; i++) pixel(g, 7 + i * 2, 9 - i * 2 - 1, '#fff');
+      } else if (it.kind === 'shovel') {
+        line(g, 3, 14, 10, 7, col(hand)); line(g, 4, 14, 11, 7, col(hand, -34));
+        poly(g, [[9, 3], [14, 4], [14, 9], [11, 10], [8, 7]], col(c)); line(g, 10, 4, 13, 5, col(hl)); line(g, 13, 6, 12, 9, col(c, -30)); pixel(g, 9, 6, col(c, -30));
       } else {
         line(g, 2, 14, 11, 5, col(hand)); line(g, 3, 14, 12, 5, col(hand, -34));
         if (it.kind === 'pick') {
@@ -184,6 +300,8 @@ const Gfx = (() => {
         poly(g, [[1, 5], [5, 3], [7, 5], [9, 5], [11, 3], [15, 5], [14, 9], [12, 8], [12, 14], [4, 14], [4, 8], [2, 9]], col(c)); line(g, 5, 6, 11, 6, col(c, 50)); line(g, 8, 6, 8, 13, col(c, -40)); for (let y = 8; y < 14; y += 2) line(g, 5, y, 11, y, col(c, -25));
         if (id === I.CRYSTAL_MAIL) pixel(g, 8, 9, '#fff');
         break; }
+      case I.FIBER: for (const [x0, x1] of [[3, 5], [6, 8], [9, 11], [12, 10]]) line(g, x0, 14, x1, 3 + ((r() * 3) | 0), col([164, 190, 80], (r() - 0.5) * 30)); line(g, 2, 9, 14, 9, col([120, 84, 40])); line(g, 2, 10, 14, 10, col([86, 60, 28])); break;
+      case I.CLAY_BRICK: poly(g, [[2, 7], [4, 4], [14, 4], [12, 7]], col([226, 120, 90])); poly(g, [[2, 7], [12, 7], [12, 12], [2, 12]], col([176, 74, 52])); poly(g, [[12, 7], [14, 4], [14, 9], [12, 12]], col([130, 52, 38])); pixel(g, 5, 9, col([206, 100, 72])); pixel(g, 8, 10, col([150, 60, 44])); break;
       case I.MUSHROOM: g.fillStyle = col([230, 226, 210]); g.fillRect(7, 8, 3, 6); g.fillStyle = col([90, 210, 255]); g.fillRect(3, 5, 11, 3); g.fillRect(5, 3, 7, 2); pixel(g, 5, 6, '#fff'); pixel(g, 10, 4, '#fff'); pixel(g, 11, 6, col([40, 120, 190])); break;
       case I.AMULET: line(g, 3, 2, 8, 9, col([200, 200, 212])); line(g, 13, 2, 8, 9, col([200, 200, 212])); poly(g, [[8, 8], [11, 11], [8, 15], [5, 11]], col([140, 120, 255])); poly(g, [[8, 8], [11, 11], [8, 11]], col([200, 240, 255])); pixel(g, 7, 10, '#fff'); break;
       default: blob(g, 8, 8, 5, [180, 180, 180], r);
@@ -279,5 +397,5 @@ const Gfx = (() => {
   }
 
   function init() { buildAtlas(); }
-  return { init, TS, VARS, BG, get atlas() { return atlas; }, get cracks() { return cracks; }, avg: (id) => avg[id] || [128, 128, 128], icon, iconURL, drawPlayer, drawMob, playerLook, PAL, rng, hash };
+  return { init, drawShape, TS, VARS, BG, get atlas() { return atlas; }, get cracks() { return cracks; }, avg: (id) => avg[id] || [128, 128, 128], icon, iconURL, drawPlayer, drawMob, playerLook, PAL, rng, hash };
 })();

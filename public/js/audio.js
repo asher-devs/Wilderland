@@ -29,13 +29,13 @@ const Sound = (() => {
     const g = ctx.createGain(); g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     s.connect(f); f.connect(g); g.connect(opt.dest || sfxG); s.start(t0, Math.random()); s.stop(t0 + dur + 0.05);
   }
-  const mats = { soft: [900, 0.5], stone: [2400, 0.9], wood: [1300, 0.7], ore: [3200, 1.0], leaf: [4000, 0.3] };
-  function matOf(id) { const b = DEFS.BLOCKS[id]; if (!b) return 'stone'; if (id === DEFS.T.LEAVES || id === DEFS.T.PLANT) return 'leaf'; return b.mat === 'none' ? 'stone' : b.mat; }
+  const mats = { soft: [900, 0.5], stone: [2400, 0.9], wood: [1300, 0.7], ore: [3200, 1.0], metal: [3600, 1.0], glass: [5200, 0.6], leaf: [4000, 0.3] };
+  function matOf(id) { const b = DEFS.BLOCKS[id]; if (!b) return 'stone'; if (id === DEFS.T.LEAVES || id === DEFS.T.PLANT) return 'leaf'; return b.mat === 'none' ? 'stone' : (mats[b.mat] ? b.mat : 'stone'); }
 
   const sfx = {
     hit(id) { const [f, g] = mats[matOf(id)]; noise(0.07, 0.35 * g, f, f * 0.3, 'lowpass', { rate: 0.8 + Math.random() * 0.5 }); tone(120 + Math.random() * 40, 0.06, 'square', 0.05 * g, { slide: 0.6 }); },
     break(id) { const [f, g] = mats[matOf(id)]; noise(0.22, 0.55 * g, f * 1.4, f * 0.2, 'lowpass'); tone(160, 0.16, 'triangle', 0.14, { slide: 0.5 }); if (id === DEFS.T.CRYSTAL) { tone(1320, 0.5, 'sine', 0.1); tone(1760, 0.6, 'sine', 0.08, { delay: 0.06 }); } },
-    place(id) { const m = matOf(id); noise(0.08, 0.3, m === 'wood' ? 1500 : 900, 300); tone(m === 'stone' ? 180 : 130, 0.1, 'triangle', 0.18, { slide: 0.7 }); },
+    place(id) { const m = matOf(id); noise(0.08, 0.3, m === 'wood' ? 1500 : m === 'glass' ? 3000 : 900, 300); tone(m === 'stone' || m === 'metal' ? 180 : 130, 0.1, 'triangle', 0.18, { slide: 0.7 }); },
     jump() { tone(280, 0.14, 'square', 0.05, { slide: 1.8 }); noise(0.05, 0.08, 2000, 800, 'highpass'); },
     land() { noise(0.09, 0.22, 500, 120); },
     step() { noise(0.04, 0.05, 900 + Math.random() * 400, 300); },

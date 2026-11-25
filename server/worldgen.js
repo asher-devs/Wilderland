@@ -26,6 +26,7 @@ function makeLoot(rnd, depthF) {
   const table = [
     [I.APPLE, 2, 5, 0], [I.COOKED_MEAT, 2, 4, 0], [T.TORCH, 10, 20, 0], [I.POTION, 1, 2, 0], [I.COPPER_BAR, 4, 9, 0],
     [T.PLANKS, 15, 30, 0], [I.IRON_BAR, 3, 8, 0.2], [I.GOLD_BAR, 2, 6, 0.4], [T.CRYSTAL, 4, 10, 0.4], [I.GEL, 3, 8, 0],
+    [T.GLASS, 4, 8, 0], [T.LANTERN, 1, 3, 0.2], [I.FIBER, 4, 10, 0], [T.BRICK, 6, 14, 0.1],
   ];
   const out = [];
   const n = 4 + Math.floor(rnd() * 4);
@@ -244,15 +245,16 @@ function generate(seed, W, H) {
   // ---- vegetation & surface decoration
   const inPond = (x) => ponds.some((p) => Math.abs(p.x - x) <= p.w);
   const setIf = (x, y, v) => { if (x > 0 && x < W - 1 && y > 0 && tiles[idx(x, y)] === T.AIR) tiles[idx(x, y)] = v; };
-  const trunk = (x, y, h) => { for (let k = 1; k <= h; k++) tiles[idx(x, y - k)] = T.LOG; };
+  const trunk = (x, y, h, lg = T.LOG) => { for (let k = 1; k <= h; k++) tiles[idx(x, y - k)] = lg; };
   const blobLeaves = (cxx, cyy, rx, ry, leaf) => { for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) { const e = (dx * dx) / (rx * rx + 0.3) + (dy * dy) / (ry * ry + 0.3); if (e <= 1.05 && (rnd() > 0.1 || e < 0.5)) setIf(cxx + dx, cyy + dy, leaf); } };
   function oak(x, y, kind, leaf) {
-    if (kind === 0) { const h = 4 + Math.floor(rnd() * 3); trunk(x, y, h); blobLeaves(x, y - h - 1, 2, 2, leaf); }
-    else if (kind === 1) { const h = 6 + Math.floor(rnd() * 4); trunk(x, y, h); blobLeaves(x, y - h - 1, 4, 3, leaf); blobLeaves(x - 3, y - h + 1, 2, 1, leaf); blobLeaves(x + 3, y - h + 1, 2, 1, leaf); setIf(x - 1, y - h + 1, T.AIR); tiles[idx(x - 1, y - 3)] = rnd() < 0.5 ? T.LOG : T.AIR; }
-    else { const h = 8 + Math.floor(rnd() * 4); trunk(x, y, h); blobLeaves(x, y - h - 2, 2, 4, leaf); }
+    const lg = leaf === T.MAPLE ? T.MAPLE_LOG : T.LOG;
+    if (kind === 0) { const h = 4 + Math.floor(rnd() * 3); trunk(x, y, h, lg); blobLeaves(x, y - h - 1, 2, 2, leaf); }
+    else if (kind === 1) { const h = 6 + Math.floor(rnd() * 4); trunk(x, y, h, lg); blobLeaves(x, y - h - 1, 4, 3, leaf); blobLeaves(x - 3, y - h + 1, 2, 1, leaf); blobLeaves(x + 3, y - h + 1, 2, 1, leaf); setIf(x - 1, y - h + 1, T.AIR); tiles[idx(x - 1, y - 3)] = rnd() < 0.5 ? lg : T.AIR; }
+    else { const h = 8 + Math.floor(rnd() * 4); trunk(x, y, h, lg); blobLeaves(x, y - h - 2, 2, 4, leaf); }
   }
-  function pine(x, y, h) { trunk(x, y, h); for (let r = 0; r < h - 1; r++) { const half = Math.min(3, 1 + Math.floor(r / 2)); const ly = y - h - 1 + r + 1; if (ly >= y - 1) break; for (let dx = -half; dx <= half; dx++) if (!(dx === 0 && ly >= y - h)) setIf(x + dx, ly, T.PINE); } setIf(x, y - h - 1, T.PINE); setIf(x, y - h - 2, T.PINE); }
-  function willow(x, y, h) { trunk(x, y, h); blobLeaves(x, y - h, 3, 2, T.WILLOW); for (const dx of [-3, -2, 2, 3, -1, 1]) { const len = 2 + Math.floor(rnd() * 3); for (let k = 1; k <= len; k++) setIf(x + dx, y - h + 2 + k - 1, T.WILLOW); } }
+  function pine(x, y, h) { trunk(x, y, h, T.PINE_LOG); for (let r = 0; r < h - 1; r++) { const half = Math.min(3, 1 + Math.floor(r / 2)); const ly = y - h - 1 + r + 1; if (ly >= y - 1) break; for (let dx = -half; dx <= half; dx++) if (!(dx === 0 && ly >= y - h)) setIf(x + dx, ly, T.PINE); } setIf(x, y - h - 1, T.PINE); setIf(x, y - h - 2, T.PINE); }
+  function willow(x, y, h) { trunk(x, y, h, T.WILLOW_LOG); blobLeaves(x, y - h, 3, 2, T.WILLOW); for (const dx of [-3, -2, 2, 3, -1, 1]) { const len = 2 + Math.floor(rnd() * 3); for (let k = 1; k <= len; k++) setIf(x + dx, y - h + 2 + k - 1, T.WILLOW); } }
   let lastTree = -10;
   for (let x = 3; x < W - 3; x++) {
     const b = biome[x], y = surf[x], here = tiles[idx(x, y)]; if (here === T.WATER || here === T.ICE && inPond(x)) continue;
@@ -322,6 +324,24 @@ function generate(seed, W, H) {
     tiles[idx(x0 + 1, floorY)] = T.TORCH; tiles[idx(x0 + rw - 2, floorY)] = T.TORCH;
     tiles[idx(x0, y0)] = T.CRYSTAL; tiles[idx(x0 + rw - 1, y0)] = T.CRYSTAL; tiles[idx(x0 + (rw >> 1), y0)] = T.CRYSTAL;
     made++;
+  }
+
+  // ---- v1.2 resource pockets: clay, gravel, moss (own RNG so existing terrain is unchanged)
+  {
+    const r2 = mulberry32(S ^ 0x2f6e2b1);
+    const blobAt = (cx0, cy0, rx, ry, from, to) => { for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) { const x = cx0 + dx, y = cy0 + dy; if (x < 2 || x >= W - 2 || y < 2 || y >= H - 4) continue; if ((dx * dx) / (rx * rx + 0.2) + (dy * dy) / (ry * ry + 0.2) <= 1.05 && from.includes(tiles[idx(x, y)])) tiles[idx(x, y)] = to; } };
+    for (let n = 0; n < W / 18; n++) { // clay beds just under the surface soil
+      const x = 6 + Math.floor(r2() * (W - 12)), y = surf[x] + 2 + Math.floor(r2() * 3);
+      blobAt(x, y, 2 + Math.floor(r2() * 3), 1 + Math.floor(r2() * 2), [T.DIRT, T.MUD, T.SAND, T.SANDSTONE, T.SNOW], T.CLAY);
+    }
+    for (let n = 0; n < W / 8; n++) { // gravel pockets in the rock
+      const x = 6 + Math.floor(r2() * (W - 12)), y = surf[x] + 6 + Math.floor(r2() * Math.max(8, H * 0.5));
+      blobAt(x, y, 2 + Math.floor(r2() * 2), 2 + Math.floor(r2() * 2), [T.STONE, T.SLATE], T.GRAVEL);
+    }
+    const sideAir = (x, y) => tiles[idx(x - 1, y)] === T.AIR || tiles[idx(x + 1, y)] === T.AIR || tiles[idx(x, y + 1)] === T.AIR || tiles[idx(x, y - 1)] === T.AIR;
+    for (let x = 3; x < W - 3; x++) for (let y = surf[x] + 8; y < H - 6; y++) { // mossy cave walls
+      if (tiles[idx(x, y)] === T.STONE && r2() < 0.05 && sideAir(x, y)) { tiles[idx(x, y)] = T.MOSS; if (r2() < 0.6 && tiles[idx(x + 1, y)] === T.STONE) tiles[idx(x + 1, y)] = T.MOSS; if (r2() < 0.5 && tiles[idx(x, y + 1)] === T.STONE) tiles[idx(x, y + 1)] = T.MOSS; }
+    }
   }
 
   // ---- bedrock floor, spawn

@@ -84,10 +84,11 @@ class World {
     return this.tiles[y * this.W + x];
   }
   solid(x, y) { return D.SOLID[this.get(x, y)] === 1; }
-  rescanTop(x) { let y = 0; while (y < this.H && !D.SOLID[this.tiles[y * this.W + x]]) y++; this.top[x] = y; }
+  coll(x, y) { return D.COLL[this.get(x, y)]; }
+  rescanTop(x) { let y = 0; while (y < this.H && !D.OPAQUE[this.tiles[y * this.W + x]]) y++; this.top[x] = y; }
   setTile(x, y, v) {
     this.tiles[y * this.W + x] = v;
-    if (D.SOLID[v]) { if (y < this.top[x]) this.top[x] = y; } else if (y === this.top[x]) this.rescanTop(x);
+    if (D.OPAQUE[v]) { if (y < this.top[x]) this.top[x] = y; } else if (y === this.top[x]) this.rescanTop(x);
     this.pending.push([x, y, v]); this.dirty = true;
   }
 
@@ -104,7 +105,7 @@ class World {
       invDirty: true, statDirty: true, msgs: 0, msgT: Date.now(), chatTimes: [], returning: !!sv, look: cleanLook(look || (sv && sv.look)),
     };
     if (sv) {
-      p.inv = sv.inv || p.inv; p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
+      p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
       if (typeof sv.x === 'number' && sv.y > 0) { p.x = sv.x; p.y = sv.y; }
     } else {
       addToInv(p.inv, I.APPLE, 3); addToInv(p.inv, T.TORCH, 6);
@@ -118,7 +119,7 @@ class World {
   }
   collides(b, x, y) {
     const hw = b.w / 2;
-    for (let ty = Math.floor(y); ty <= Math.floor(y + b.h - 1e-6); ty++) for (let tx = Math.floor(x - hw); tx <= Math.floor(x + hw - 1e-6); tx++) if (this.solid(tx, ty)) return true;
+    for (let ty = Math.floor(y); ty <= Math.floor(y + b.h - 1e-6); ty++) for (let tx = Math.floor(x - hw); tx <= Math.floor(x + hw - 1e-6); tx++) if (this.coll(tx, ty)) return true;
     return false;
   }
   playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y) } }; }
@@ -166,6 +167,7 @@ class World {
       case 'place': return this.onPlace(p, m);
       case 'atk': return this.onAttack(p, m);
       case 'sel': p.sel = Math.max(0, Math.min(C.HOTBAR - 1, m.i | 0)); return;
+      case 'sort': return this.onSort(p);
       case 'swap': return this.onSwap(p, m);
       case 'craft': return this.onCraft(p, m);
       case 'equip': return this.onEquip(p, m);
@@ -211,7 +213,7 @@ class World {
     if (!p.mine || p.mine.x !== x || p.mine.y !== y) p.mine = { x, y, prog: 0, last: now - 50, fx: 0 };
     const dt = Math.min(0.2, (now - p.mine.last) / 1000); p.mine.last = now;
     const tool = this.bestTool(p, id);
-    if (!isFinite(tool.time)) { this.send(p, { t: 'mp', x, y, p: 0, no: 1 }); return; }
+    if (!isFinite(tool.time)) { p.mine = null; this.send(p, { t: 'mp', x, y, p: 0, no: 1 }); return; }
     p.mine.prog += dt / tool.time;
     if (now - p.mine.fx > 180) { p.mine.fx = now; this.fx.push(['hit', x + 0.5, y + 0.5, id]); }
     if (p.mine.prog >= 1) {
@@ -230,21 +232,21 @@ class World {
       delete this.chests[key];
       for (const q of this.players.values()) if (q.chest === key) { q.chest = null; this.send(q, { t: 'chestClosed' }); }
     }
-    if (b.drop >= 0) this.spawnDrop(b.drop, 1, x + 0.5, y + 0.5);
+    if (b.drop >= 0 && Math.random() < b.dropP) this.spawnDrop(b.drop, 1, x + 0.5, y + 0.5);
     if (D.LEAF[id] && id !== T.PINE && Math.random() < 0.07) this.spawnDrop(I.APPLE, 1, x + 0.5, y + 0.5);
-    if (id === T.LOG) this.fellTree(p, x, y);
+    if (D.LOGS[id]) this.fellTree(p, x, y, id);
     // plants above lose their support
     const up = this.get(x, y - 1);
-    if (up === T.PLANT) { this.setTile(x, y - 1, T.AIR); }
+    if (D.DECOR[up] && up !== T.ROCK && up !== T.MUSHROOM) { this.setTile(x, y - 1, T.AIR); if (BLOCKS[up].drop >= 0 && Math.random() < BLOCKS[up].dropP) this.spawnDrop(BLOCKS[up].drop, 1, x + 0.5, y - 0.5); }
     if (tool && tool.i >= 0) {
-      const s = p.inv[tool.i]; s[2]--; if (s[2] <= 0) { p.inv[tool.i] = null; this.send(p, { t: 'toolBreak', item: s[0] }); }
+      const s = p.inv[tool.i]; s[2] -= D.toolWear(id); if (s[2] <= 0) { p.inv[tool.i] = null; this.send(p, { t: 'toolBreak', item: s[0] }); }
       p.invDirty = true;
     }
     this.state.mined++;
   }
   /** Chopping a trunk topples everything above it (only for real trees: the top must carry leaves). */
-  fellTree(p, x, y) {
-    let top = y - 1; while (this.get(x, top) === T.LOG) top--; // first non-log above
+  fellTree(p, x, y, lg) {
+    let top = y - 1; while (this.get(x, top) === lg) top--; // first non-log above
     const logs = []; for (let yy = y - 1; yy > top; yy--) logs.push(yy);
     if (!logs.length) return;
     let hasLeaves = false; for (let dy = -2; dy <= 2 && !hasLeaves; dy++) for (let dx = -2; dx <= 2; dx++) if (D.LEAF[this.get(x + dx, top + 1 + dy)]) { hasLeaves = true; break; }
@@ -255,26 +257,36 @@ class World {
       const [cx, cy, d] = q[qi]; if (d >= 5) continue;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, ny = cy + dy, k = ny * this.W + nx; if (seen.has(k) || !D.LEAF[this.get(nx, ny)]) continue; seen.add(k); leaves.push([nx, ny, this.get(nx, ny)]); q.push([nx, ny, d + 1]); }
     }
-    for (const ly of logs) { this.setTile(x, ly, T.AIR); this.spawnDrop(T.LOG, 1, x + 0.5 + dir * (logs[0] - ly) * 0.25, ly + 0.5, 0, dir * 2, -3); }
+    for (const ly of logs) { this.setTile(x, ly, T.AIR); this.spawnDrop(lg, 1, x + 0.5 + dir * (logs[0] - ly) * 0.25, ly + 0.5, 0, dir * 2, -3); }
     for (const [lx, ly, lt] of leaves) { this.setTile(lx, ly, T.AIR); if (lt !== T.PINE && Math.random() < 0.05) this.spawnDrop(I.APPLE, 1, lx + 0.5, ly + 0.5); }
-    this.fx.push(['tree', x + 0.5, y, { h: logs.length, dir, base: y, leaves: leaves.map(([lx, ly, lt]) => [lx - x, ly - y, lt]).slice(0, 80), n: logs.length }]);
+    this.fx.push(['tree', x + 0.5, y, { h: logs.length, dir, base: y, lg, leaves: leaves.map(([lx, ly, lt]) => [lx - x, ly - y, lt]).slice(0, 80), n: logs.length }]);
   }
   onPlace(p, m) {
     if (p.dead) return;
     const x = m.x | 0, y = m.y | 0; if (x < 1 || x >= this.W - 1 || y < 1 || y >= this.H - 3) return;
-    const s = p.inv[p.sel]; if (!s) return; const it = ITEMS[s[0]]; if (!it || !it.block) return;
+    const s = p.inv[p.sel]; if (!s) return; const it = ITEMS[s[0]];
     const cur = this.get(x, y);
-    if (!(cur === T.AIR || cur === T.WATER || cur === T.PLANT || cur === T.LEAVES)) return;
+    // axe on a natural log strips it into a solid building log
+    if (it && it.kind === 'axe' && D.STRIPPED[cur]) {
+      if (!this.reach(p, x, y)) return;
+      this.setTile(x, y, D.STRIPPED[cur]); this.fx.push(['place', x + 0.5, y + 0.5, D.STRIPPED[cur]]);
+      s[2]--; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); } p.invDirty = true; return;
+    }
+    if (!it || !it.block) return;
+    if (!(cur === T.AIR || cur === T.WATER || D.DECOR[cur] && cur !== T.ROCK || D.LEAF[cur])) return;
     if (!this.reach(p, x, y)) return;
-    const sup = (a, b2) => { const v = this.get(a, b2); return v !== T.AIR && v !== T.WATER && v !== T.PLANT; };
+    const sup = (a, b2) => { const v = this.get(a, b2); return v !== T.AIR && v !== T.WATER && !D.DECOR[v]; };
     if (!(sup(x - 1, y) || sup(x + 1, y) || sup(x, y - 1) || sup(x, y + 1) || y > this.surf[x] + 1)) return;
-    if (D.SOLID[it.block]) for (const q of this.players.values()) {
+    let blk = it.block;
+    const sh = D.SHAPE[blk];
+    if (sh && sh.kind === 'stairR') blk = p.x < x + 0.5 ? D.SHAPE_OF[sh.base + ':stairR'] : D.SHAPE_OF[sh.base + ':stairL']; // tall side faces away from you
+    if (D.COLL[blk]) for (const q of this.players.values()) {
       if (q.dead) continue;
       if (x + 1 > q.x - q.w / 2 && x < q.x + q.w / 2 && y + 1 > q.y && y < q.y + q.h) return;
     }
-    this.setTile(x, y, it.block);
-    if (it.block === T.CHEST) this.chests[x + ',' + y] = new Array(C.CHEST_SLOTS).fill(null);
-    this.fx.push(['place', x + 0.5, y + 0.5, it.block]);
+    this.setTile(x, y, blk);
+    if (blk === T.CHEST) this.chests[x + ',' + y] = new Array(C.CHEST_SLOTS).fill(null);
+    this.fx.push(['place', x + 0.5, y + 0.5, blk]);
     if (--s[1] <= 0) p.inv[p.sel] = null;
     p.invDirty = true;
   }
@@ -301,6 +313,20 @@ class World {
       this.fx.push(['mobdie', mob.x, mob.y + mob.h / 2, mob.type]);
       for (const d of MOBS[mob.type].drops) if (Math.random() < d[1]) this.spawnDrop(d[0], d[2] + Math.floor(Math.random() * (d[3] - d[2] + 1)), mob.x, mob.y);
     }
+  }
+  /** merge stacks and order by category then id; hotbar (first 10 slots) is left alone */
+  onSort(p) {
+    const items = []; for (let i = C.HOTBAR; i < C.INV; i++) if (p.inv[i]) items.push(p.inv[i]);
+    const merged = [];
+    for (const s of items) {
+      const max = ITEMS[s[0]].stack || 1;
+      if (max > 1) { const t = merged.find((q) => q[0] === s[0] && q[1] < max); if (t) { const mv = Math.min(max - t[1], s[1]); t[1] += mv; s[1] -= mv; if (s[1] <= 0) continue; } }
+      merged.push(s);
+    }
+    const rank = (id) => { const it = ITEMS[id]; return it.kind ? 0 : it.armor ? 1 : it.heal ? 2 : it.block !== undefined ? 3 : 4; };
+    merged.sort((a, b) => rank(a[0]) - rank(b[0]) || a[0] - b[0]);
+    for (let i = C.HOTBAR; i < C.INV; i++) p.inv[i] = merged[i - C.HOTBAR] || null;
+    p.invDirty = true;
   }
   onSwap(p, m) {
     const a = m.a | 0, b = m.b | 0; if (a < 0 || b < 0 || a >= C.INV || b >= C.INV || a === b) return;
@@ -341,6 +367,7 @@ class World {
     const r = RECIPES[m.r | 0]; if (!r) return;
     if (r.st === 'bench' && !this.nearStation(p, T.BENCH)) return this.send(p, { t: 'toast', m: 'You need a Workbench nearby' });
     if (r.st === 'furnace' && !this.nearStation(p, T.FURNACE)) return this.send(p, { t: 'toast', m: 'You need a Furnace nearby' });
+    if (r.st === 'mason' && !this.nearStation(p, T.MASON)) return this.send(p, { t: 'toast', m: "You need a Mason's Table nearby" });
     for (const [id, n] of r.ing) if (countInv(p.inv, id) < n) return;
     const before = p.inv.map((s) => (s ? s.slice() : null));
     for (const [id, n] of r.ing) removeFromInv(p.inv, id, n);
@@ -418,7 +445,7 @@ class World {
     if (wz.t <= 0) { wz.target = wz.target ? 0 : (Math.random() < 0.55 ? 1 : 0); wz.t = wz.target ? 50 + Math.random() * 70 : 90 + Math.random() * 200; if (this.players.size) this.sys(wz.target ? '☁ Clouds roll in… it begins to rain' : '☀ The rain clears'); }
     wz.rain += (wz.target - wz.rain) * Math.min(1, dt * 0.25);
     const night = isNight(st.time);
-    const solid = (x, y) => this.solid(x, y);
+    const solid = (x, y) => this.coll(x, y);
     // players
     for (const p of this.players.values()) {
       if (p.invul > 0) p.invul -= dt;

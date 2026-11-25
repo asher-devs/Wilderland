@@ -90,9 +90,9 @@ const UI = (() => {
   }
   function tipHtml(s) {
     const it = ITEMS[s[0]]; let h = `<b>${it.name}</b>`;
-    if (it.kind) h += `<small>${it.kind === 'sword' ? 'Weapon · ' + it.dmg + ' damage' : (it.kind === 'pick' ? 'Pickaxe' : 'Axe') + ' · tier ' + it.tier + ' · ' + it.dmg + ' dmg'}</small><small>Durability ${s[2]}/${it.dur}</small>`;
+    if (it.kind) h += `<small>${it.kind === 'sword' ? 'Weapon · ' + it.dmg + ' damage' : ({ pick: 'Pickaxe', axe: 'Axe', shovel: 'Shovel' }[it.kind]) + ' · ' + DEFS.TIER_NAMES[it.tier] + ' tier · speed ×' + it.speed}</small>${it.kind === 'pick' ? `<small>Mines ${['', 'stone & slate', 'copper ore', 'iron ore & crystal', 'gold ore', 'everything'][it.tier]}</small>` : it.kind === 'axe' ? '<small>Fells trees · right-click a log to strip it</small>' : it.kind === 'shovel' ? '<small>Digs dirt, sand, clay & gravel fast</small>' : ''}<small>Durability ${s[2]}/${it.dur}</small>`;
     if (it.armor) h += `<small>${it.armor} slot${it.def ? ' · +' + it.def + ' defense' : ''}${it.hp ? ' · +' + it.hp + ' max HP' : ''}</small><small>Right-click to equip</small>`;
-    if (it.heal) h += `<small>Heals ${it.heal} HP</small>`; if (it.block !== undefined) h += `<small>Placeable block</small>`; return h;
+    if (it.heal) h += `<small>Heals ${it.heal} HP</small>`; if (it.block !== undefined) { const bl = BLOCKS[it.block]; h += `<small>Placeable${DEFS.SHAPE[it.block] ? ' ' + DEFS.SHAPE[it.block].kind.replace('stairR', 'stairs') : ' block'}${bl && bl.tier ? ' · mined with ' + DEFS.TIER_NAMES[bl.tier] + ' pickaxe+' : ''}</small>`; } return h;
   }
   const tip = $('tip');
   function showTip(s, e) { if (!s || state.drag) return; tip.innerHTML = tipHtml(s); tip.style.display = 'block'; moveTip(e); }
@@ -118,6 +118,7 @@ const UI = (() => {
     if (S.chest) { const cg = $('chest-grid'); cg.innerHTML = ''; S.chest.slots.forEach((s, i) => { const d = slotEl(s, i, { chest: i }); d.onclick = () => { if (s) Game.send({ t: 'chestMove', x: S.chest.x, y: S.chest.y, from: 'chest', i }); Sound.play('click'); }; cg.appendChild(d); }); }
     renderRecipes();
   }
+  $('sort-btn').onclick = () => { Game.send({ t: 'sort' }); Sound.play('click'); };
   function wire(d, i) {
     d.addEventListener('pointerdown', (e) => { if (e.button === 2) return; hideTip(); const s = S.inv[i]; state.drag = { i, x: e.clientX, y: e.clientY, moved: false, has: !!s }; });
     d.addEventListener('contextmenu', (e) => { e.preventDefault(); const s = S.inv[i]; if (s && ITEMS[s[0]].armor) Game.send({ t: 'equip', from: i }); else if (s && ITEMS[s[0]].heal) { Game.send({ t: 'sel', i: Math.min(i, 9) }); } });
@@ -150,15 +151,18 @@ const UI = (() => {
   let selRecipe = -1;
   const count = (id) => { let c = 0; for (const s of S.inv) if (s && s[0] === id) c += s[1]; return c; };
   function near(tile) { const m = S.me; if (!m) return false; const cx = Math.floor(m.x), cy = Math.floor(m.y + 1); for (let y = cy - 4; y <= cy + 4; y++) for (let x = cx - 6; x <= cx + 6; x++) if (Game.get(x, y) === tile) return true; return false; }
-  function status(r) { const st = r.st === 'hand' ? true : near(r.st === 'bench' ? T.BENCH : T.FURNACE); const has = r.ing.every(([id, n]) => count(id) >= n); return { st, has, ok: st && has }; }
+  const STN = { bench: [T.BENCH, 'a Workbench'], furnace: [T.FURNACE, 'a Furnace'], mason: [T.MASON, "a Mason's Table"] };
+  let cat = 'all';
+  function status(r) { const st = r.st === 'hand' ? true : near(STN[r.st][0]); const has = r.ing.every(([id, n]) => count(id) >= n); return { st, has, ok: st && has }; }
   function renderRecipes() {
-    const el = $('recipes'); el.innerHTML = ''; const bench = near(T.BENCH), fur = near(T.FURNACE);
-    $('stations').innerHTML = `<span class="st ok">✋ Hand</span><span class="st ${bench ? 'ok' : ''}">🔨 Workbench</span><span class="st ${fur ? 'ok' : ''}">🔥 Furnace</span>`;
-    const order = RECIPES.map((r, i) => ({ r, i, s: status(r) })).sort((a, b) => (b.s.ok - a.s.ok) || (a.i - b.i));
+    const el = $('recipes'); el.innerHTML = ''; const bench = near(T.BENCH), fur = near(T.FURNACE), mas = near(T.MASON);
+    const tabs = $('rtabs'); tabs.innerHTML = ''; for (const [k, lab] of DEFS.CATS) { const b = document.createElement('button'); b.textContent = lab; b.className = k === cat ? 'on' : ''; b.onclick = () => { cat = k; renderRecipes(); Sound.play('click'); }; tabs.appendChild(b); }
+    $('stations').innerHTML = `<span class="st ok">✋ Hand</span><span class="st ${bench ? 'ok' : ''}">🔨 Workbench</span><span class="st ${fur ? 'ok' : ''}">🔥 Furnace</span><span class="st ${mas ? 'ok' : ''}">🧱 Mason</span>`;
+    const order = RECIPES.map((r, i) => ({ r, i, s: status(r) })).filter((o) => cat === 'all' || o.r.cat === cat).sort((a, b) => (b.s.ok - a.s.ok) || (a.i - b.i));
     for (const { r, i, s } of order) { const d = slotEl([r.out, r.n, 0], undefined, { cls: 'rc' + (s.ok ? '' : ' no') + (i === selRecipe ? ' sel' : '') }); d.onclick = () => { selRecipe = i; renderRecipes(); Sound.play('click'); }; d.onmouseenter = (e) => showTip([r.out, 1, ITEMS[r.out].dur || 0], e); el.appendChild(d); }
     const det = $('recipe-detail'); const r = RECIPES[selRecipe];
     if (!r) { det.innerHTML = '<small style="color:var(--mu)">Select a recipe. Items you can make now are listed first.</small>'; return; }
-    const s = status(r); det.innerHTML = `<b>${itemName(r.out)}</b>${r.n > 1 ? ' ×' + r.n : ''} <small style="color:var(--mu)">needs ${r.st === 'hand' ? 'nothing' : r.st === 'bench' ? 'a Workbench' : 'a Furnace'}${s.st ? '' : ' <span style="color:var(--bad)">(not nearby)</span>'}</small><div class="ing">${r.ing.map(([id, n]) => `<span class="${count(id) >= n ? '' : 'lack'}"><img src="${Gfx.iconURL(id)}"> ${itemName(id)} ${count(id)}/${n}</span>`).join('')}</div>`;
+    const s = status(r); det.innerHTML = `<b>${itemName(r.out)}</b>${r.n > 1 ? ' ×' + r.n : ''} <small style="color:var(--mu)">needs ${r.st === 'hand' ? 'nothing' : STN[r.st][1]}${s.st ? '' : ' <span style="color:var(--bad)">(not nearby)</span>'}</small><div class="ing">${r.ing.map(([id, n]) => `<span class="${count(id) >= n ? '' : 'lack'}"><img src="${Gfx.iconURL(id)}"> ${itemName(id)} ${count(id)}/${n}</span>`).join('')}</div>`;
     const b = document.createElement('button'); b.className = 'pri'; b.textContent = 'Craft'; b.disabled = !s.ok; b.style.opacity = s.ok ? 1 : 0.4; b.onclick = () => Game.send({ t: 'craft', r: selRecipe }); det.appendChild(b);
   }
 

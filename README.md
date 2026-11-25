@@ -32,3 +32,10 @@ node test/browser.js     # headless Chrome, 3 browsers incl. mobile (needs puppe
 - Frontend only (static): GitHub Pages, Cloudflare Pages or Netlify. Upload the `public/` folder and set `server` in `public/config.js` to your backend host.
 - Backend (needs a long-running Node process with WebSockets): Render, Fly.io, Railway or any VPS. SQLite needs a persistent disk/volume: free tiers that sleep or have ephemeral disks will lose saves, so mount a volume (Fly volumes) or point `DATA_DIR` at persistent storage.
 - Simplest: run the Node server anywhere (it serves the game itself) and share the URL.
+
+## v1.2 — Mining, building & crafting overhaul
+- **Mining tiers:** hand → wood → stone → copper → iron → crystal pickaxes. Stone/ore/metal blocks need a pickaxe of the right tier (axes and hands can't); the game tells you which one. Shovels dig soft blocks fast; axes chop wood and right-click strips logs. Hard blocks wear tools faster.
+- **100+ new blocks:** cobblestone/brick/polished stone families, clay, bricks, terracotta, adobe, mud bricks, roofing, 4 glass types, metal blocks, 4 wood types with stripped logs & planks, marble, basalt, parquet, bookshelves, lanterns… plus **slabs, stairs and walls** (real collision, auto-step).
+- **Crafting:** 125+ recipes in category tabs; new **Mason's Table** station. Stone now drops cobblestone — smelt it in a Furnace to get smooth stone.
+- Clay, gravel and moss generate in the world; plants drop fibre. Bag has 50 slots and a Sort button.
+- `node test/content.js` verifies every block is breakable, every item obtainable, every recipe craftable.

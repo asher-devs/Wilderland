@@ -40,7 +40,7 @@ async function mk(browser, name, look, vp) {
   await sleep(1200); ok((await A.page.evaluate(() => Game.S.inv.some((s) => s && s[0] === 2))), 'drop collected into inventory');
   // inventory UI + crafting list
   await A.page.keyboard.press('e'); await sleep(300); await A.page.screenshot({ path: '/tmp/s4-inv.png' });
-  ok((await A.page.$$eval('#inv-grid .slot', (e) => e.length)) === 40 && (await A.page.$$eval('#recipes .slot', (e) => e.length)) > 20, 'inventory (40 slots) and recipes render'); await A.page.keyboard.press('e');
+  ok((await A.page.$$eval('#inv-grid .slot', (e) => e.length)) === 50 && (await A.page.$$eval('#recipes .slot', (e) => e.length)) > 20, 'inventory (50 slots) and recipes render'); await A.page.keyboard.press('e');
   // chat
   await A.page.keyboard.press('t'); await A.page.keyboard.type('hello bob'); await A.page.keyboard.press('Enter'); await sleep(400);
   ok((await B.page.$eval('#chat-log', (e) => e.textContent)).includes('hello bob'), 'chat delivered between browsers');
