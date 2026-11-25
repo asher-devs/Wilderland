@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>WILDERLAND</title><meta name="theme-color" content="#0e1424">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="css/style.css"></head>
+<body>
+<canvas id="bg"></canvas><canvas id="game"></canvas>
+
+<main id="screens">
+  <section id="s-main" class="screen on">
+    <div class="logo"><span>WILDER</span><span class="b">LAND</span></div>
+    <p class="tag">mine · craft · build · survive — together</p>
+    <nav class="menu">
+      <button data-go="worlds"><i>▶</i> Play</button>
+      <button data-go="char"><i>☺</i> Character</button>
+      <button data-go="settings"><i>⚙</i> Settings</button>
+    </nav>
+    <div class="who"><canvas id="mini" width="64" height="96"></canvas><div><small>Playing as</small><b id="who-name">Wanderer</b></div></div>
+  </section>
+
+  <section id="s-worlds" class="screen">
+    <button class="back" data-go="main">← Back</button>
+    <h2>Worlds</h2>
+    <div class="cols">
+      <div class="panel"><h3>Your worlds</h3><div id="world-list" class="wlist"><em>No worlds yet — create one!</em></div>
+        <h3>Join with a room code</h3><div class="row"><input id="join-code" maxlength="6" placeholder="ABCDE" autocapitalize="characters" spellcheck="false"><button id="btn-join" class="pri">Join</button></div></div>
+      <div class="panel"><h3>Create world</h3>
+        <label>Name<input id="cw-name" maxlength="24" value="My World"></label>
+        <label>Size<select id="cw-size"><option value="small">Small (fast)</option><option value="medium" selected>Medium</option><option value="large">Large</option></select></label>
+        <label>Difficulty<select id="cw-diff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></label>
+        <label>Seed <small>(optional)</small><input id="cw-seed" placeholder="random" inputmode="numeric"></label>
+        <label class="chk"><input type="checkbox" id="cw-mobs" checked> Monsters</label>
+        <button id="btn-create" class="pri wide">Create &amp; play</button></div>
+    </div>
+  </section>
+
+  <section id="s-char" class="screen">
+    <button class="back" data-go="main">← Back</button>
+    <h2>Character</h2>
+    <div class="cols">
+      <div class="panel prev"><canvas id="char-prev" width="240" height="320"></canvas>
+        <label>Name<input id="char-name" maxlength="14"></label>
+        <div class="row"><button id="char-rand">🎲 Randomize</button></div>
+        <small>Your look is shown to everyone in the world, so friends can tell you apart.</small></div>
+      <div class="panel opts" id="char-opts"></div>
+    </div>
+  </section>
+
+  <section id="s-settings" class="screen">
+    <button class="back" data-go="main">← Back</button>
+    <h2>Settings</h2>
+    <div class="panel narrow" id="set-body"></div>
+  </section>
+</main>
+
+<div id="loading"><div class="logo sm"><span>WILDER</span><span class="b">LAND</span></div><div class="bar"><i id="load-fill"></i></div><p id="load-msg">Loading…</p><p id="load-tip" class="tip"></p></div>
+<div id="reconnect"><div>Connection lost — reconnecting…</div></div>
+<div id="fade"></div>
+
+<div id="hud">
+  <div id="hp"><span class="heart">♥</span><div class="hpbar"><i id="hp-fill"></i><b id="hp-txt">100</b></div><span id="def" title="Defense">🛡0</span></div>
+  <div id="info"><b id="info-code" title="Click to copy invite link">ROOM</b><span id="info-clock">☀ Day</span><span id="info-prog"></span></div>
+  <div id="plist"></div>
+  <div id="chat"><div id="chat-log"></div><input id="chat-in" maxlength="160" placeholder="Say something…" autocomplete="off"></div>
+  <div id="hotname"></div>
+  <div id="hotbar"></div>
+  <div id="toasts"></div>
+  <div id="touch">
+    <div class="pad"><button id="t-left">◀</button><button id="t-right">▶</button></div>
+    <div class="acts"><button id="t-mode" class="mode">⛏</button><button id="t-jump">▲</button></div>
+    <div class="side"><button id="t-inv">🎒</button><button id="t-chat">💬</button><button id="t-menu">☰</button></div>
+  </div>
+  <div id="death"><h1>You died</h1><p id="death-by"></p><small>Respawning…</small></div>
+</div>
+
+<div id="inv" class="modal">
+  <div class="inv-wrap">
+    <div class="panel invp"><div class="ph"><h3>Inventory</h3><button class="x" data-close>✕</button></div>
+      <div class="eqrow"><div id="eq"></div><div id="statline"></div></div>
+      <div id="inv-grid" class="grid"></div>
+      <div id="chest-box" class="chestbox"><h4>Storage chest</h4><div id="chest-grid" class="grid"></div></div>
+    </div>
+    <div class="panel craftp"><div class="ph"><h3>Crafting</h3></div>
+      <div id="stations"></div><div id="recipes"></div>
+      <div id="recipe-detail"></div></div>
+  </div>
+</div>
+
+<div id="pause" class="modal"><div class="panel narrow">
+  <div class="ph"><h3 id="pause-title">Paused</h3><button class="x" data-close>✕</button></div>
+  <div id="pause-body"></div></div></div>
+<div id="tip"></div><div id="drag"></div>
+<script src="config.js"></script>
+<script src="js/defs.js"></script><script src="js/gfx.js"></script><script src="js/audio.js"></script>
+<script src="js/game.js"></script><script src="js/ui.js"></script><script src="js/menubg.js"></script>
+</body></html>

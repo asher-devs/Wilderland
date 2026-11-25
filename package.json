@@ -1,0 +1,9 @@
+{
+  "name": "wilderland",
+  "version": "1.0.0",
+  "description": "WILDERLAND - a multiplayer 2D sandbox survival game for the browser",
+  "main": "server/index.js",
+  "scripts": { "start": "node --no-warnings server/index.js", "test": "node test/two-clients.js", "preview": "node tools/preview.js" },
+  "engines": { "node": ">=22.5" },
+  "license": "MIT"
+}
