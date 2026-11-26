@@ -277,7 +277,7 @@ const Gfx = (() => {
     if (it.block !== undefined) { if (DEFS.SHAPE[it.block]) drawShape(g, it.block, 0, 0, TS, 0, true, true); else g.drawImage(atlas, it.block * TS, 0, TS, TS, 0, 0, TS, TS); return; }
     const hand = [128, 86, 44];
     if (it.kind && it.kind !== 'rod') {
-      const [c, hl] = TIER[it.tier];
+      const [c, hl] = id === I.WARDEN_BLADE ? [[128, 70, 190], [255, 150, 90]] : TIER[it.tier];
       if (it.kind === 'sword') {
         line(g, 3, 13, 6, 10, col(hand)); line(g, 2, 14, 3, 13, col([90, 58, 28]));
         for (let i = 0; i < 9; i++) { const x = 6 + i, y = 10 - i; pixel(g, x, y, col(c)); pixel(g, x + 1, y, col(hl)); pixel(g, x, y + 1, col(c, -30)); }
@@ -309,11 +309,14 @@ const Gfx = (() => {
         poly(g, [[3, 12], [3, 7], [5, 4], [11, 4], [13, 7], [13, 12], [11, 12], [11, 9], [5, 9], [5, 12]], col(c)); line(g, 5, 5, 10, 5, col(c, 50)); g.fillStyle = col(c, -50); g.fillRect(3, 11, 2, 2); g.fillRect(11, 11, 2, 2);
         if (id === I.GOLD_HELM) { pixel(g, 4, 3, col(c)); pixel(g, 8, 2, col(c)); pixel(g, 12, 3, col(c)); pixel(g, 8, 3, '#ff4060'); }
         break; }
-      case I.COPPER_MAIL: case I.IRON_MAIL: case I.CRYSTAL_MAIL: {
-        const c = id === I.COPPER_MAIL ? [210, 116, 60] : id === I.IRON_MAIL ? [186, 194, 208] : [110, 214, 250];
+      case I.COPPER_MAIL: case I.IRON_MAIL: case I.CRYSTAL_MAIL: case I.WARDEN_MAIL: {
+        const c = id === I.WARDEN_MAIL ? [112, 84, 170] : id === I.COPPER_MAIL ? [210, 116, 60] : id === I.IRON_MAIL ? [186, 194, 208] : [110, 214, 250];
         poly(g, [[1, 5], [5, 3], [7, 5], [9, 5], [11, 3], [15, 5], [14, 9], [12, 8], [12, 14], [4, 14], [4, 8], [2, 9]], col(c)); line(g, 5, 6, 11, 6, col(c, 50)); line(g, 8, 6, 8, 13, col(c, -40)); for (let y = 8; y < 14; y += 2) line(g, 5, y, 11, y, col(c, -25));
         if (id === I.CRYSTAL_MAIL) pixel(g, 8, 9, '#fff');
+        if (id === I.WARDEN_MAIL) { rectI(g, 7, 8, 2, 3, [120, 240, 255]); pixel(g, 7, 8, '#fff'); }
         break; }
+      case I.WARDEN_SIGIL: { blob(g, 8, 8, 6, [60, 52, 90], r); blob(g, 8, 8, 4.4, [96, 84, 150], r); for (const [x0, y0, x1, y1] of [[8, 3, 8, 13], [3, 8, 13, 8], [4, 4, 12, 12], [12, 4, 4, 12]]) line(g, x0, y0, x1, y1, col([140, 240, 255])); pixel(g, 8, 8, '#fff'); pixel(g, 7, 8, '#bff'); pixel(g, 9, 8, '#bff'); break; }
+      case I.WARDEN_CORE: { poly(g, [[8, 1], [13, 6], [11, 14], [5, 14], [3, 6]], col([40, 150, 190])); poly(g, [[8, 1], [13, 6], [8, 8]], col([150, 240, 255])); poly(g, [[8, 8], [13, 6], [11, 14]], col([30, 110, 160])); poly(g, [[8, 8], [3, 6], [5, 14]], col([70, 190, 230])); pixel(g, 7, 5, '#fff'); pixel(g, 8, 4, '#e8ffff'); break; }
       case I.FIBER: for (const [x0, x1] of [[3, 5], [6, 8], [9, 11], [12, 10]]) line(g, x0, 14, x1, 3 + ((r() * 3) | 0), col([164, 190, 80], (r() - 0.5) * 30)); line(g, 2, 9, 14, 9, col([120, 84, 40])); line(g, 2, 10, 14, 10, col([86, 60, 28])); break;
       case I.CLAY_BRICK: poly(g, [[2, 7], [4, 4], [14, 4], [12, 7]], col([226, 120, 90])); poly(g, [[2, 7], [12, 7], [12, 12], [2, 12]], col([176, 74, 52])); poly(g, [[12, 7], [14, 4], [14, 9], [12, 12]], col([130, 52, 38])); pixel(g, 5, 9, col([206, 100, 72])); pixel(g, 8, 10, col([150, 60, 44])); break;
       case I.LEATHER: poly(g, [[3, 4], [13, 3], [14, 11], [9, 14], [3, 12]], col([160, 96, 56])); poly(g, [[3, 4], [13, 3], [11, 6], [5, 7]], col([188, 120, 70])); line(g, 5, 10, 11, 10, col([110, 62, 34])); pixel(g, 6, 12, col([110, 62, 34])); break;
@@ -363,7 +366,7 @@ const Gfx = (() => {
     limb(0.5, shY + 1, air ? -0.9 : -ls * 0.9 + 0.1, 2.6, 8, o.hurt > 0 ? [255, 160, 150] : look.skin.map((v) => v * 0.82));
     limb(0, hipY, air ? -0.5 : -ls, 3.2, 10, pants.map((v) => v * 0.8), shoe);
     // torso
-    const shirt = o.body ? (o.body === I.LEATHER_TUNIC ? [160, 96, 56] : o.body === I.COPPER_MAIL ? [210, 116, 60] : o.body === I.IRON_MAIL ? [186, 194, 208] : [110, 214, 250]) : look.shirt;
+    const shirt = o.body ? (o.body === I.WARDEN_MAIL ? [112, 84, 170] : o.body === I.LEATHER_TUNIC ? [160, 96, 56] : o.body === I.COPPER_MAIL ? [210, 116, 60] : o.body === I.IRON_MAIL ? [186, 194, 208] : [110, 214, 250]) : look.shirt;
     g.fillStyle = f(shirt); g.fillRect(-3.2 * u, (shY) * u, 6.4 * u, 9.5 * u); g.fillStyle = col(shirt.map((v) => v * 0.78)); g.fillRect(-3.2 * u, (shY + 7) * u, 6.4 * u, 1.2 * u);
     if (o.body) { g.fillStyle = 'rgba(255,255,255,0.28)'; g.fillRect(-3.2 * u, shY * u, 6.4 * u, 1.2 * u); }
     // front leg
@@ -400,6 +403,12 @@ const Gfx = (() => {
     g.restore(); g.restore();
   }
 
+  function drawFist(g, cx, cy, u) {
+    g.save(); g.translate(Math.round(cx), Math.round(cy)); g.fillStyle = 'rgba(255,170,60,0.18)'; g.beginPath(); g.arc(0, 0, 15 * u, 0, 7); g.fill();
+    const R = (x, y, w, h, c) => { g.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; g.fillRect(x * u, y * u, w * u, h * u); };
+    R(-9, -9, 18, 18, [88, 92, 108]); R(-9, -9, 18, 3, [118, 122, 140]); R(-9, 6, 18, 3, [58, 60, 74]); R(-6, -5, 4, 10, [62, 64, 78]); R(2, -5, 4, 10, [62, 64, 78]); R(-3, -12, 6, 4, [170, 120, 240]); R(-1, -3, 3, 3, [255, 190, 90]);
+    g.restore();
+  }
   function drawMob(g, type, cx, by, u, o) {
     g.save(); g.translate(Math.round(cx), Math.round(by)); g.scale(o.f < 0 ? -1 : 1, 1); const t = o.t, hurt = o.hurt;
     const C = (c) => (hurt ? col([255, 255, 255], 0) : col(c)); const R = (x, y, w, h, c) => { g.fillStyle = C(c); g.fillRect(x * u, y * u, w * u, h * u); };
@@ -415,6 +424,22 @@ const Gfx = (() => {
       case 'wolf': { const ls = Math.sin(t * 12) * 1.5; const body = [120, 124, 134], dk = [84, 88, 98]; R(-7, -9, 13, 6, body); R(-7, -9, 13, 2, [150, 154, 164]); R(5, -12, 5, 5, body); R(9, -10.5, 3, 2.5, dk); R(5, -14, 1.5, 2.5, dk); R(8, -14, 1.5, 2.5, dk); R(8, -10.5, 1.2, 1.2, [250, 210, 70]); R(-9, -10 + Math.sin(t * 6) * 0.8, 3, 2, dk); R(-6, -3, 2, 3 + ls * 0.4, dk); R(-2, -3, 2, 3 - ls * 0.4, body); R(2, -3, 2, 3 + ls * 0.4, body); R(5, -3, 2, 3 - ls * 0.4, dk); break; }
       case 'bat': { const fl = Math.sin(t * 22); R(-2, -4, 4, 4, [70, 52, 90]); R(-2, -6, 1.2, 2, [70, 52, 90]); R(1, -6, 1.2, 2, [70, 52, 90]); g.fillStyle = C([54, 40, 72]); g.beginPath(); g.moveTo(-2 * u, -3 * u); g.lineTo(-9 * u, (-6 + fl * 4) * u); g.lineTo(-6 * u, (-1) * u); g.closePath(); g.fill(); g.beginPath(); g.moveTo(2 * u, -3 * u); g.lineTo(9 * u, (-6 + fl * 4) * u); g.lineTo(6 * u, -1 * u); g.closePath(); g.fill(); R(-1.2, -3.2, 1, 1, [255, 80, 80]); R(0.4, -3.2, 1, 1, [255, 80, 80]); break; }
       case 'crawler': { const glow = 0.5 + Math.sin(t * 4) * 0.3; R(-7, -7, 14, 5, [60, 40, 90]); R(3, -9, 6, 5, [74, 50, 110]); for (let i = 0; i < 4; i++) { R(-6 + i * 3.4, -3 + Math.sin(t * 14 + i * 1.7) * 0.7, 1.3, 3.6, [40, 26, 62]); } g.fillStyle = hurt ? '#fff' : `rgba(210,140,255,${glow})`; for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo((-5 + i * 3.5) * u, -7 * u); g.lineTo((-4 + i * 3.5) * u, -12 * u); g.lineTo((-3 + i * 3.5) * u, -7 * u); g.fill(); } R(6, -7.5, 1.4, 1.4, [255, 230, 120]); R(4, -7.5, 1.4, 1.4, [255, 230, 120]); break; }
+      case 'warden': { const ph = o.ph || 1, pulse = 0.6 + Math.sin(t * (ph === 3 ? 7 : 4)) * 0.4, sl = hurt ? [255, 255, 255] : [88, 92, 108], sd = [62, 64, 78], sh = [112, 116, 134];
+        const cc = ph === 1 ? [90, 230, 255] : ph === 2 ? [255, 170, 60] : [255, 70, 80], stp = o.moving ? Math.sin(t * 5) * 2 : 0;
+        R(-17, -26 + (stp > 0 ? 0 : -1), 12, 26 + (stp > 0 ? 0 : 1), sl); R(5, -26 + (stp < 0 ? 0 : -1), 12, 26 + (stp < 0 ? 0 : 1), sl); R(-19, -4, 16, 4, sd); R(3, -4, 16, 4, sd); R(-17, -26, 3, 24, sh);
+        R(-25, -66, 50, 44, sl); R(-25, -66, 50, 4, sh); R(-25, -26, 50, 4, sd); R(-22, -62, 4, 36, sd); R(18, -62, 4, 36, sd);
+        for (const [x, y, w, h] of [[-14, -58, 6, 2], [8, -52, 8, 2], [-16, -42, 10, 2], [10, -38, 6, 2], [-4, -30, 8, 2]]) R(x, y, w, h, [48, 50, 62]);
+        g.fillStyle = `rgba(${cc[0]},${cc[1]},${cc[2]},${0.18 + pulse * 0.25})`; g.beginPath(); g.arc(0, -46 * u, (13 + pulse * 3) * u, 0, 7); g.fill();
+        R(-8, -54, 16, 16, [40, 42, 54]); R(-6, -52, 12, 12, cc.map((q) => Math.round(q * (0.6 + pulse * 0.4)))); R(-3, -50, 4, 4, [255, 255, 255]);
+        R(-36, -70, 16, 12, sd); R(20, -70, 16, 12, sd); R(-34, -80, 5, 12, [160, 110, 230]); R(-28, -76, 4, 8, [190, 140, 250]); R(29, -80, 5, 12, [160, 110, 230]); R(24, -76, 4, 8, [190, 140, 250]);
+        if (ph !== 2) { R(-36, -60, 10, 32, sl); R(26, -60, 10, 32, sl); R(-38, -30, 14, 12, sh); R(24, -30, 14, 12, sh); R(-38, -20, 14, 2, sd); R(24, -20, 14, 2, sd); }
+        else { R(-30, -60, 6, 10, sd); R(24, -60, 6, 10, sd); }
+        R(-13, -86, 26, 20, sl); R(-13, -86, 26, 3, sh); R(-10, -69, 20, 4, sd);
+        for (const [x, y, w, h] of [[-11, -95, 4, 9], [-3, -101, 5, 15], [6, -95, 4, 9]]) R(x, y, w, h, [170, 120, 240]);
+        R(-9, -80, 6, 4, cc); R(3, -80, 6, 4, cc); R(-8, -79, 2, 2, [255, 255, 255]); R(4, -79, 2, 2, [255, 255, 255]);
+        if (o.sh) { g.strokeStyle = 'rgba(120,200,255,0.8)'; g.lineWidth = 2 * u; g.beginPath(); g.ellipse(0, -50 * u, 42 * u, 56 * u, 0, 0, 7); g.stroke(); g.fillStyle = 'rgba(120,200,255,0.12)'; g.fill(); }
+        if (o.st) for (let i = 0; i < 4; i++) { const a = t * 4 + i * 1.57; R(Math.cos(a) * 14 - 1.5, -104 + Math.sin(a) * 4, 3, 3, [255, 230, 90]); }
+        break; }
       case 'skeleton': { const ls = o.moving ? Math.sin(t * 9) : 0, B = [226, 226, 214], D2 = [160, 160, 148]; R(-2.5, -8, 2, 8 + (ls > 0.6 ? -1 : 0), B); R(0.5, -8, 2, 8 + (ls < -0.6 ? -1 : 0), B);
         R(-3, -10, 6, 1.5, D2); R(-2.5, -15, 5, 6, B); R(-1.5, -14, 0.8, 4.5, [40, 40, 44]); R(0.7, -14, 0.8, 4.5, [40, 40, 44]); R(-0.4, -12.5, 0.8, 3, [40, 40, 44]);
         R(-3.5, -23, 7, 7, B); R(-2.5, -21.5, 1.8, 1.8, [24, 24, 30]); R(0.8, -21.5, 1.8, 1.8, [24, 24, 30]); R(-1.5, -18.5, 3, 1.2, [60, 60, 66]);
@@ -462,5 +487,5 @@ const Gfx = (() => {
   }
 
   function init() { buildAtlas(); }
-  return { init, drawShape, TS, VARS, BG, get atlas() { return atlas; }, get cracks() { return cracks; }, avg: (id) => avg[id] || [128, 128, 128], icon, iconURL, drawPlayer, drawMob, playerLook, PAL, rng, hash };
+  return { init, drawShape, TS, VARS, BG, get atlas() { return atlas; }, get cracks() { return cracks; }, avg: (id) => avg[id] || [128, 128, 128], icon, iconURL, drawPlayer, drawMob, drawFist, playerLook, PAL, rng, hash };
 })();

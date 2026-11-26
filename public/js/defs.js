@@ -33,6 +33,7 @@
     COPPER_HELM: 122, IRON_HELM: 123, GOLD_HELM: 124,
     COPPER_MAIL: 125, IRON_MAIL: 126, CRYSTAL_MAIL: 127, AMULET: 128, MUSHROOM: 129,
     LEATHER: 136, WOOL: 137, FEATHER: 138, RAW_FISH: 139, COOKED_FISH: 140, FISHING_ROD: 141, LURE: 142, LEATHER_CAP: 143, LEATHER_TUNIC: 144, GOLDEN_CARP: 145,
+    WARDEN_SIGIL: 146, WARDEN_CORE: 147, WARDEN_BLADE: 148, WARDEN_MAIL: 149,
     CLAY_BRICK: 130, FIBER: 131, WOOD_SHOVEL: 132, STONE_SHOVEL: 133, COPPER_SHOVEL: 134, IRON_SHOVEL: 135,
   };
   const TIER_NAMES = ['Hand', 'Wooden', 'Stone', 'Copper', 'Iron', 'Crystal'];
@@ -236,6 +237,9 @@
   const armor = (id, name, slot, def, hp) => { ITEMS[id] = { id, name, stack: 1, armor: slot, def, hp: hp || 0 }; };
   armor(I.COPPER_HELM, 'Copper Helm', 'head', 2); armor(I.IRON_HELM, 'Iron Helm', 'head', 3); armor(I.GOLD_HELM, 'Gold Crown', 'head', 4, 10);
   armor(I.COPPER_MAIL, 'Copper Mail', 'body', 3); armor(I.IRON_MAIL, 'Iron Mail', 'body', 5); armor(I.CRYSTAL_MAIL, 'Crystal Mail', 'body', 8);
+  ITEMS[I.WARDEN_SIGIL] = { id: I.WARDEN_SIGIL, name: 'Warden Sigil', stack: 5, summon: 'warden' };
+  ITEMS[I.WARDEN_CORE] = { id: I.WARDEN_CORE, name: 'Warden Core', stack: 20 };
+  tool(I.WARDEN_BLADE, 'Warden Blade', 'sword', 5, 1, 900, 46); armor(I.WARDEN_MAIL, 'Warden Mail', 'body', 11, 20);
   armor(I.LEATHER_CAP, 'Leather Cap', 'head', 1); armor(I.LEATHER_TUNIC, 'Leather Tunic', 'body', 2);
   armor(I.AMULET, 'Crystal Amulet', 'charm', 0, 40);
 
@@ -348,6 +352,9 @@
     R(T.IRON_GRATE, 3, [[I.IRON_BAR, 2]], 'bench', 'metal'),
     R(T.CRYSTAL_BLOCK, 1, [[T.CRYSTAL, 4]], 'bench', 'metal'),
     R(T.CRYSTAL_LAMP, 2, [[T.CRYSTAL, 2], [T.GLASS, 2]], 'bench', 'decor'),
+    R(I.WARDEN_SIGIL, 1, [[T.CRYSTAL, 5], [I.IRON_BAR, 4], [I.GEL, 3], [I.RAW_FISH, 3]], 'bench', 'tools'),
+    R(I.WARDEN_BLADE, 1, [[I.WARDEN_CORE, 2], [I.IRON_BAR, 6]], 'bench', 'tools'),
+    R(I.WARDEN_MAIL, 1, [[I.WARDEN_CORE, 3], [I.IRON_BAR, 8]], 'bench', 'tools'),
     R(T.LADDER, 4, [[T.PLANKS, 2], [I.FIBER, 1]], 'hand', 'misc'),
     R(T.DOOR, 1, [[T.PLANKS, 6]], 'bench', 'decor'),
     R(T.WALL_PLANKS, 4, [[T.PLANKS, 1]], 'hand', 'decor'), R(T.WALL_STONE, 4, [[T.STONE, 1]], 'hand', 'decor'),
@@ -377,6 +384,7 @@
     frog: { name: 'Bog Frog', hp: 11, dmg: 6, speed: 2.8, w: 0.6, h: 0.5, drops: [[I.GEL, 0.5, 1, 1], [I.RAW_MEAT, 0.4, 1, 1]] },
     wolf: { name: 'Grey Wolf', hp: 34, dmg: 16, speed: 4.6, w: 1.2, h: 0.85, drops: [[I.RAW_MEAT, 0.85, 1, 2]] },
     crawler: { name: 'Crystal Crawler', hp: 70, dmg: 24, speed: 4.4, w: 1.1, h: 0.8, glow: [0.8, 0.5, 1], drops: [[T.CRYSTAL, 0.6, 1, 3], [I.IRON_BAR, 0.4, 1, 3], [I.GOLD_BAR, 0.25, 1, 2], [I.COOKED_MEAT, 0.3, 1, 2]] },
+    warden: { name: 'Hollow Warden', hp: 700, dmg: 22, speed: 2.4, w: 3.4, h: 5.4, boss: true, drops: [[I.WARDEN_CORE, 1, 2, 3], [T.CRYSTAL, 1, 6, 10], [I.IRON_BAR, 1, 4, 8], [I.GOLD_BAR, 1, 1, 3]] },
     skeleton: { name: 'Skeleton', hp: 22, dmg: 6, speed: 2.2, w: 0.6, h: 1.7, ranged: true, drops: [[I.COPPER_BAR, 0.3, 1, 2], [I.IRON_BAR, 0.12, 1, 1], [I.FEATHER, 0.5, 1, 2], [I.FIBER, 0.4, 1, 2]] },
     boomer: { name: 'Boomer', hp: 18, dmg: 0, speed: 2.6, w: 0.7, h: 1.2, boom: true, drops: [[I.GEL, 0.6, 1, 2], [T.CRYSTAL, 0.12, 1, 1], [I.IRON_BAR, 0.1, 1, 1]] },
     spider: { name: 'Cave Spider', hp: 20, dmg: 11, speed: 4.2, w: 1.1, h: 0.6, drops: [[I.FIBER, 0.7, 1, 3], [I.RAW_MEAT, 0.3, 1, 1], [I.GEL, 0.3, 1, 1]] },

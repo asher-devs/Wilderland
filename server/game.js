@@ -170,6 +170,7 @@ class World {
       case 'sort': return this.onSort(p);
       case 'sleep': return this.onSleep(p, m);
       case 'door': return this.onDoor(p, m);
+      case 'summon': return this.summonWarden(p);
       case 'fish': return this.onFish(p, m);
       case 'wake': return this.wake(p);
       case 'swap': return this.onSwap(p, m);
@@ -333,7 +334,13 @@ class World {
     if (hit && it && it.dur) { s[2]--; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); } p.invDirty = true; }
   }
   hurtMob(mob, dmg, dir, p) {
+    if (mob.type === 'warden') dmg *= mob.sh ? 0.35 : mob.stun > 0 ? 1.5 : 1;
     dmg = Math.max(1, Math.round(dmg));
+    if (mob.type === 'warden') { mob.hp -= dmg; mob.hurt = 0.12; this.fx.push(['mobhit', mob.x + (Math.random() - 0.5) * 2.4, mob.y + 1 + Math.random() * 3, dmg]);
+      if (mob.hp <= 0) { this.mobs.delete(mob.id); this.state.kills++; this.state.bosses = (this.state.bosses || 0) + 1; this.dirty = true; this.fx.push(['bossdie', mob.x, mob.y + mob.h / 2, 0]);
+        for (const d of MOBS.warden.drops) if (Math.random() < d[1]) this.spawnDrop(d[0], d[2] + Math.floor(Math.random() * (d[3] - d[2] + 1)), mob.x + (Math.random() - 0.5) * 2, mob.y + 2);
+        this.sys('🏆 The Hollow Warden has fallen!'); }
+      return; }
     if (MOBS[mob.type].neutral) mob.angry = 20; else if (MOBS[mob.type].animal) mob.scared = 6;
     mob.hp -= dmg; mob.hurt = 0.3; mob.vx = dir * 7; mob.vy = -6; mob.ground = false;
     this.fx.push(['mobhit', mob.x, mob.y + mob.h / 2, dmg]);
@@ -569,16 +576,108 @@ class World {
     }
     for (const m of this.mobs.values()) { if (m === src || MOBS[m.type].animal) continue; const d = Math.hypot(m.x - x, m.y - y); if (d < r) { m.hp -= Math.round(dmg * 0.5 * (1 - d / r)); if (m.hp <= 0) this.mobs.delete(m.id); } }
   }
+  /** projectiles: k 0 arrow, 1 crystal shard (straight), 2 falling spike, 3 ground shockwave */
   stepArrows(dt) {
     for (let i = this.arrows.length - 1; i >= 0; i--) {
-      const a = this.arrows[i]; a.life -= dt; a.vy += 14 * dt; a.x += a.vx * dt; a.y += a.vy * dt;
-      let dead = a.life <= 0 || this.solid(Math.floor(a.x), Math.floor(a.y));
+      const a = this.arrows[i], k = a.k || 0; a.life -= dt;
+      a.vy += (k === 2 ? 20 : k === 1 || k === 3 ? 0 : 14) * dt; a.x += a.vx * dt; a.y += a.vy * dt;
+      let dead = a.life <= 0 || this.solid(Math.floor(a.x), Math.floor(k === 3 ? a.y - 0.5 : a.y));
       if (!dead) for (const p of this.players.values()) {
         if (p.dead || p.invul > 0) continue;
-        if (Math.abs(a.x - p.x) < p.w / 2 + 0.15 && a.y > p.y && a.y < p.y + p.h) { this.hurtPlayer(p, a.dmg, a.vx > 0 ? 1 : -1, 'Skeleton'); dead = true; break; }
+        let hit;
+        if (k === 3) hit = Math.abs(a.x - p.x) < p.w / 2 + 0.6 && p.y + p.h > a.y - 0.55;
+        else { const r = k === 0 ? 0.15 : 0.4; hit = Math.abs(a.x - p.x) < p.w / 2 + r && a.y > p.y - r && a.y < p.y + p.h + r; }
+        if (hit) { this.hurtPlayer(p, a.dmg, a.vx > 0 ? 1 : -1, a.by || 'Skeleton'); dead = true; break; }
       }
       if (dead) this.arrows.splice(i, 1);
     }
+  }
+
+  // ---------------------------------------------------------------- boss: the Hollow Warden
+  findBoss() { for (const m of this.mobs.values()) if (m.type === 'warden') return m; return null; }
+  summonWarden(p) {
+    if (p.dead || p.sleep) return;
+    const s = p.inv[p.sel]; if (!s || s[0] !== D.I.WARDEN_SIGIL) return;
+    if (this.findBoss()) return this.send(p, { t: 'toast', m: 'The Warden is already awake' });
+    const px = Math.max(8, Math.min(this.W - 9, Math.floor(p.x)));
+    if (p.y - this.surf[px] > 22) return this.send(p, { t: 'toast', m: 'The sigil only burns near the surface' });
+    const def = MOBS.warden, side = Math.random() < 0.5 ? -1 : 1;
+    let x = px + side * 15; if (x < 6 || x > this.W - 7) x = px - side * 15;
+    x = Math.max(6, Math.min(this.W - 7, x)); const gy = this.surf[x], top = gy - Math.ceil(def.h);
+    for (let yy = top; yy < gy; yy++) for (let xx = Math.floor(x - def.w / 2) - 1; xx <= Math.ceil(x + def.w / 2); xx++) { const id = this.get(xx, yy); if (id !== T.AIR && id !== T.BED && id !== T.BED_R && id !== T.CHEST) this.setTile(xx, yy, T.AIR); }
+    if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true;
+    const n = [...this.players.values()].filter((q) => !q.dead).length, mob = this.addMob('warden', x, gy - def.h - 0.01, 0, DIFF.normal);
+    mob.maxhp = mob.hp = 700 + 300 * (n - 1); mob.ph = 1; mob.a1 = 3; mob.a2 = 4.5; mob.a3 = 8; mob.fl = 0; mob.stun = 0; mob.sh = 0; mob.step = true;
+    mob.fists = [{ x, y: gy - 4, st: 0, t: 0, side: -1 }, { x, y: gy - 4, st: 0, t: 0, side: 1 }];
+    this.fx.push(['roar', x, gy - 3, 0]); this.sys(`⚠ ${p.name} woke the Hollow Warden!`);
+  }
+  shoot(mob, target, n, spread, speed, dmg) {
+    const ox = mob.x, oy = mob.y + 1.6, base = Math.atan2(target.y + 0.8 - oy, target.x - ox);
+    for (let i = 0; i < n; i++) { const an = base + (i - (n - 1) / 2) * spread; this.arrows.push({ k: 1, x: ox, y: oy, vx: Math.cos(an) * speed, vy: Math.sin(an) * speed, life: 3.2, dmg, by: 'Hollow Warden' }); }
+    this.fx.push(['shoot', ox, oy, 0]);
+  }
+  boxFree(m) { for (let ty = Math.floor(m.y); ty <= Math.floor(m.y + m.h - 1e-6); ty++) for (let tx = Math.floor(m.x - m.w / 2); tx <= Math.floor(m.x + m.w / 2 - 1e-6); tx++) if (this.solid(tx, ty)) return false; return true; }
+  stepWarden(mob, dt, solid) {
+    const def = MOBS.warden; mob.t += dt; if (mob.hurt > 0) mob.hurt -= dt;
+    let target = null, nd = Infinity;
+    for (const p of this.players.values()) { if (p.dead) continue; const d = Math.hypot(p.x - mob.x, p.y + 0.8 - (mob.y + mob.h / 2)); if (d < nd) { nd = d; target = p; } }
+    if (!target || nd > 85) { mob.away = (mob.away || 0) + dt; if (mob.away > 15) { this.mobs.delete(mob.id); this.sys('The Hollow Warden sinks back into the stone.'); return; } } else mob.away = 0;
+    const ratio = mob.hp / mob.maxhp, ph = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
+    if (ph !== mob.ph) { mob.ph = ph; mob.a1 = 2; mob.a2 = 3.5; mob.a3 = 6; mob.fl = 0; mob.stun = 0; mob.slam = false; this.fx.push(['roar', mob.x, mob.y + 2, ph]); this.sys(ph === 2 ? '💥 The Warden\'s fists tear loose — strike while they fly!' : '🌩 The Warden rises — shelter from the spikes, strike when it falls!'); }
+    const cx = mob.x, cy = mob.y + mob.h / 2, tx = target ? target.x : cx;
+    mob.f = tx < cx ? -1 : 1; if (mob.stun > 0) mob.stun -= dt;
+    // fists (phase 2): shielded while both are home
+    if (ph === 2) {
+      mob.a1 -= dt; mob.a2 -= dt;
+      for (const f of mob.fists) {
+        const hx = cx + f.side * 2.7, hy = cy - 0.2 + Math.sin(mob.t * 2 + f.side) * 0.35;
+        if (f.st === 0) { f.x += (hx - f.x) * Math.min(1, dt * 10); f.y += (hy - f.y) * Math.min(1, dt * 10); }
+        else if (f.st === 1) { f.t += dt; const dx = f.tx - f.x, dy = f.ty - f.y, dd = Math.hypot(dx, dy) || 1, st = Math.min(dd, 16 * dt); f.x += dx / dd * st; f.y += dy / dd * st; if (dd < 0.7 || f.t > 1.1) f.st = 2; }
+        else { const dx = hx - f.x, dy = hy - f.y, dd = Math.hypot(dx, dy) || 1, st = Math.min(dd, 19 * dt); f.x += dx / dd * st; f.y += dy / dd * st; if (dd < 0.8) { f.st = 0; f.hit = false; } }
+        if (f.st !== 0 && !f.hit) for (const p of this.players.values()) if (!p.dead && p.invul <= 0 && Math.hypot(p.x - f.x, p.y + 0.8 - f.y) < 1.2) { f.hit = true; this.hurtPlayer(p, 24, p.x < f.x ? -1 : 1, 'Hollow Warden'); }
+      }
+      if (mob.a1 <= 0 && target && mob.fists.every((f) => f.st === 0)) { const f = mob.fists[(mob.fi = ((mob.fi || 0) + 1) % 2)]; f.st = 1; f.t = 0; f.tx = target.x; f.ty = target.y + 0.8; f.hit = false; mob.a1 = 2.4; this.fx.push(['shoot', f.x, f.y, 0]); }
+      if (mob.a2 <= 0 && target) { mob.a2 = 7; this.shoot(mob, target, 3, 0.3, 9, 14); }
+    }
+    mob.sh = ph === 2 && mob.fists.every((f) => f.st === 0) ? 1 : 0;
+    const floating = ph === 3 && mob.stun <= 0;
+    if (!floating) {
+      const dir = mob.stun > 0 || !target ? 0 : Math.abs(tx - cx) < 2 ? 0 : tx < cx ? -1 : 1, sp = def.speed * (ph === 2 ? 1.25 : 1);
+      mob.vx += (dir * sp - mob.vx) * Math.min(1, dt * 3);
+      mob.vy = Math.min(C.MAXFALL, mob.vy + C.GRAVITY * dt);
+      D.moveBody(mob, dt, solid);
+      if (mob.hitX && dir) { // trample soft blocks in front; hard walls make it jump
+        const fx = Math.floor(cx + dir * (mob.w / 2 + 0.25)); let blocked = false;
+        for (let yy = Math.floor(mob.y); yy < Math.floor(mob.y + mob.h); yy++) { const id = this.get(fx, yy), b = D.BLOCKS[id];
+          if (b && D.SOLID[id]) { if ((b.mat === 'soft' || b.mat === 'wood' || b.mat === 'glass') && id !== T.BED && id !== T.BED_R && id !== T.CHEST) { this.setTile(fx, yy, T.AIR); this.fx.push(['smoke', fx + 0.5, yy + 0.5, 0]); } else blocked = true; } }
+        if (blocked && mob.onGround) mob.vy = -12;
+      }
+      if (ph === 1 && mob.stun <= 0) {
+        mob.a1 -= dt; mob.a2 -= dt;
+        if (mob.a1 <= 0 && mob.onGround && !mob.slam) { mob.vy = -15; mob.slam = true; mob.slamT = mob.t; mob.a1 = 4.2; }
+        if (mob.slam && mob.onGround && mob.t - mob.slamT > 0.3) { mob.slam = false; this.stomp(mob); }
+        if (mob.a2 <= 0 && target) { mob.a2 = 6.5; this.shoot(mob, target, 3, 0.28, 10, 14); }
+      }
+      if (ph === 3 && mob.stun > 0 && mob.onGround && mob.landed !== mob.stunId) { mob.landed = mob.stunId; this.stomp(mob); }
+    } else {
+      mob.fl += dt;
+      const dx = (tx + Math.sin(mob.t * 0.6) * 8) - cx, dy = ((target ? target.y : cy) - 7) - cy;
+      mob.vx += (Math.max(-7, Math.min(7, dx * 1.4)) - mob.vx) * Math.min(1, dt * 2.5); mob.vy += (Math.max(-6, Math.min(6, dy * 1.4)) - mob.vy) * Math.min(1, dt * 2.5);
+      mob.x += mob.vx * dt; mob.y += mob.vy * dt; mob.x = Math.max(3, Math.min(this.W - 3, mob.x)); mob.y = Math.max(2, mob.y); mob.onGround = false;
+      mob.a1 -= dt; mob.a2 -= dt; mob.a3 -= dt;
+      if (mob.a1 <= 0 && target) { mob.a1 = 2.2; for (let k = 0; k < 4; k++) this.arrows.push({ k: 2, x: target.x + (Math.random() - 0.5) * 15, y: target.y - 9 - Math.random() * 3, vx: 0, vy: 3, life: 3.5, dmg: 17, by: 'Hollow Warden' }); }
+      if (mob.a2 <= 0 && target) { mob.a2 = 5; this.shoot(mob, target, 5, 0.3, 9, 14); }
+      if (mob.a3 <= 0) { mob.a3 = 13; let n = 0; for (const m of this.mobs.values()) if ((m.type === 'boomer' || m.type === 'spider') && Math.hypot(m.x - cx, m.y - cy) < 40) n++;
+        for (let k = 0; k < 2 && n < 4; k++, n++) { const t = Math.random() < 0.5 ? 'boomer' : 'spider', mm = MOBS[t]; this.addMob(t, cx + (k ? 2.4 : -2.4), Math.min(mob.y + mob.h, this.surf[Math.floor(cx)] - mm.h - 0.2), 0, DIFF.normal); }
+        this.fx.push(['roar', cx, cy, 3]); }
+      if (mob.fl > 11) { mob.stun = 3.2; mob.stunId = (mob.stunId || 0) + 1; mob.fl = 0; mob.vx = 0; mob.vy = 2; for (let g = 0; g < 40 && !this.boxFree(mob); g++) mob.y -= 1; this.sys('⚡ The Warden crashes down — now is your chance!'); }
+    }
+    mob.ground = mob.onGround;
+  }
+  stomp(mob) {
+    const gy = mob.y + mob.h;
+    for (const d of [-1, 1]) this.arrows.push({ k: 3, x: mob.x + d * (mob.w / 2 + 0.3), y: gy, vx: d * 9, vy: 0, life: 1.9, dmg: 18, by: 'Hollow Warden' });
+    this.fx.push(['stomp', mob.x, gy, 0]);
   }
   hurtPlayer(p, dmg, dir, by) {
     const reduce = Math.min(0.65, D.defenseFor(p.eq) * 0.04);
@@ -651,10 +750,12 @@ class World {
     this.mobs.set(mob.id, mob); return mob;
   }
   stepMob(mob, dt, night, solid) {
+    if (mob.type === 'warden') return this.stepWarden(mob, dt, solid);
     const def = MOBS[mob.type];
     // despawn
     let nearest = null, nd = Infinity;
     for (const p of this.players.values()) { if (p.dead) continue; const d = Math.hypot(p.x - mob.x, p.y + 0.8 - mob.y); if (d < nd) { nd = d; nearest = p; } }
+    if (mob.type === 'warden') return this.stepWarden(mob, dt, solid);
     if (!nearest || nd > 70) { this.mobs.delete(mob.id); return; }
     if (mob.type === 'zombie' && !night && mob.y < this.top[Math.max(0, Math.min(this.W - 1, Math.floor(mob.x)))] + 1) {
       mob.hp -= 4 * dt; if (Math.random() < dt * 4) this.fx.push(['smoke', mob.x, mob.y, 0]);
@@ -862,7 +963,7 @@ class World {
     for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0, o.fuse > 0 ? r2(o.fuse) : 0]);
     for (const o of this.drops.values()) d.push([o.id, o.item, o.n, r2(o.x), r2(o.y)]);
     const fl = []; for (const q of this.players.values()) if (q.line) fl.push([q.id, r2(q.line.x), r2(q.line.y), q.line.st]);
-    return { t: 'snap', fl, ar: this.arrows.map((a) => [r2(a.x), r2(a.y), r2(a.vx), r2(a.vy)]), rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
+    return { t: 'snap', fl, ar: this.arrows.map((a) => [r2(a.x), r2(a.y), r2(a.vx), r2(a.vy), a.k || 0]), bs: (() => { const b = this.findBoss(); return b ? { id: b.id, ph: b.ph, sh: b.sh, st: b.stun > 0 ? 1 : 0, f: b.fists.map((f) => [r2(f.x), r2(f.y), f.st]) } : null; })(), rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
   }
   flush() {
     if (this.pending.length) { this.broadcast({ t: 'tiles', c: this.pending }); this.pending = []; }

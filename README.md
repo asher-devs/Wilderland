@@ -58,3 +58,8 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 - **Doors** (6 planks, bench): two tiles tall, right-click to open/close, can't be closed on a player. Breaking either half drops one door.
 - **Back wall panels** (plank/stone/brick/dark, 4 per craft): passable decorative walls that block sky light and mob spawns inside; any block placed on one replaces it. Limitation: single tile layer, so a torch placed on a wall replaces the wall.
 - Tile ids 248–255 are now used; defs.js throws if generated shapes ever grow into them. Tests: `test/building.js`, `test/building-ui.js`.
+
+## v1.6 — The Hollow Warden (boss)
+- **Summon:** craft a Warden Sigil (5 crystal, 4 iron bar, 3 gel, 3 raw fish) and use it near the surface. One boss at a time; HP 700 +300 per extra player. It leaves if everyone is gone for 15 s.
+- **Phase 1 (>66%)** stomps (ground shockwaves — jump them) and fires crystal shards; it tramples dirt/wood/glass but not stone. **Phase 2 (>33%)** fists detach and fly at you; it is shielded (35% damage) while both fists are home, so dodge, then hit it when a fist is out. **Phase 3** it floats, rains crystal spikes (roofs stop them), summons Boomers/spiders and every ~11 s crashes down stunned (150% damage).
+- **Loot:** Warden Core (→ Warden Blade, Warden Mail), crystal, iron and gold bars. Tests: `test/boss.js`, `test/boss-ui.js`.

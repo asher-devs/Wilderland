@@ -192,7 +192,7 @@ const Game = (() => {
       p.tx = a[1]; p.ty = a[2]; p.vx = a[3]; p.vy = a[4]; p.f = a[5]; p.a = a[6]; p.held = a[7]; p.hp = a[8]; p.maxhp = a[9]; p.head = a[10]; p.body = a[11];
     }
     for (const id of S.players.keys()) if (!seen.has(id)) S.players.delete(id);
-    S.lines = m.fl || []; S.arrows = m.ar || [];
+    S.lines = m.fl || []; S.arrows = m.ar || []; S.boss = m.bs || null;
     const seenM = new Set();
     for (const a of m.m) { seenM.add(a[0]); let o = S.mobs.get(a[0]); if (!o) { o = { id: a[0], type: a[1], x: a[2], y: a[3], t: Math.random() * 9, w: MOBS[a[1]].w, h: MOBS[a[1]].h, px: a[2], py: a[3] }; S.mobs.set(a[0], o); } o.tx = a[2]; o.ty = a[3]; o.f = a[4]; o.hp = a[5]; o.maxhp = a[6]; o.hurt = a[7]; o.fuse = a[8] || 0; }
     for (const id of S.mobs.keys()) if (!seenM.has(id)) S.mobs.delete(id);
@@ -216,6 +216,9 @@ const Game = (() => {
       case 'shoot': Sound.play('swing'); break;
       case 'boom': Sound.play('mobdie'); Sound.play('smoke'); S.shake = Math.max(S.shake || 0, 0.5); for (let i = 0; i < 40; i++) { const an = Math.random() * 6.28, sp = 2 + Math.random() * 9; part(x, y, Math.cos(an) * sp, Math.sin(an) * sp, 0.5 + Math.random() * 0.6, i % 3 ? [255, 170 + Math.random() * 60, 40] : [70, 70, 70], 4 + Math.random() * 3, 0.3); } break;
       case 'door': Sound.play('place', T.PLANKS); break;
+      case 'roar': Sound.play('mobdie'); S.shake = Math.max(S.shake || 0, 0.9); for (let i = 0; i < 26; i++) part(x + (Math.random() - 0.5) * 4, y + Math.random() * 3, (Math.random() - 0.5) * 8, -Math.random() * 6, 0.9, [150, 120, 230], 3); break;
+      case 'stomp': Sound.play('place', T.STONE); Sound.play('smoke'); S.shake = Math.max(S.shake || 0, 0.7); for (let i = 0; i < 30; i++) part(x + (Math.random() - 0.5) * 3, y - 0.2, (Math.random() - 0.5) * 12, -Math.random() * 4, 0.6, [170, 150, 120], 3); break;
+      case 'bossdie': Sound.play('mobdie'); S.shake = 1.2; for (let i = 0; i < 90; i++) { const an = Math.random() * 6.28, sp = 3 + Math.random() * 12; part(x, y, Math.cos(an) * sp, Math.sin(an) * sp, 1 + Math.random() * 1, i % 2 ? [110, 230, 255] : [190, 140, 250], 3 + Math.random() * 3); } break;
       case 'cast': Sound.play('splash'); for (let i = 0; i < 6; i++) part(x, y, (Math.random() - 0.5) * 3, -Math.random() * 3, 0.5, [170, 215, 255], 2); break;
       case 'bite': Sound.play('splash'); S.texts.push({ x, y: y - 0.9, txt: '!', life: 0.9, max: 0.9, c: '#ff5a4a' }); for (let i = 0; i < 8; i++) part(x, y, (Math.random() - 0.5) * 4, -Math.random() * 4, 0.5, [190, 225, 255], 2); break;
       case 'catch': Sound.play('splash'); for (let i = 0; i < 12; i++) part(x, y, (Math.random() - 0.5) * 5, -Math.random() * 7, 0.7, [190, 225, 255], 3); break;
@@ -337,6 +340,7 @@ const Game = (() => {
         else if (it && it.kind === 'rod') { if (now > placeT) { placeT = now + 450; send({ t: 'fish', a: 'cast', x: tx, y: ty }); m.swing = 0; acting = true; } }
         else if (it && it.kind === 'axe' && DEFS.STRIPPED[id] && inReach(tx, ty)) { if (now > placeT) { placeT = now + 350; send({ t: 'place', x: tx, y: ty }); acting = true; } }
         else if (it && it.block !== undefined) { if (now > placeT && inReach(tx, ty)) { placeT = now + 120; send({ t: 'place', x: tx, y: ty }); acting = true; } }
+        else if (it && it.summon && now > useT) { useT = now + 800; send({ t: 'summon' }); }
         else if (it && it.heal && now > useT) { useT = now + 350; send({ t: 'use' }); }
       }
       a.edge = false;
@@ -487,7 +491,7 @@ const Game = (() => {
     // drops
     for (const d of S.drops.values()) { const sx = d.x * TS + ox, sy = (d.y) * TS + oy + Math.sin(d.t * 3) * TS * 0.06 - TS * 0.2; const sz = TS * 0.5; g.drawImage(Gfx.icon(d.item), sx - sz / 2, sy - sz / 2, sz, sz); if (d.n > 1) { g.fillStyle = '#fff'; g.font = `${Math.round(TS * 0.3)}px monospace`; g.fillText(d.n, sx + sz / 3, sy + sz / 1.5); } }
     // mobs
-    for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16, { f: o.f, t: o.t, hurt: o.hurt, air: o.air, id: o.id, moving: Math.abs(o.tx - o.x) > 0.004 || Math.abs(o.ty - o.y) > 0.004, angry: MOBS[o.type].neutral && o.hurt, fuse: o.fuse });
+    for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16, { f: o.f, t: o.t, hurt: o.hurt, air: o.air, id: o.id, moving: Math.abs(o.tx - o.x) > 0.004 || Math.abs(o.ty - o.y) > 0.004, angry: MOBS[o.type].neutral && o.hurt, fuse: o.fuse, ph: S.boss && S.boss.id === o.id ? S.boss.ph : 0, sh: S.boss && S.boss.id === o.id && S.boss.sh, st: S.boss && S.boss.id === o.id && S.boss.st });
     // other players
     for (const p of S.players.values()) { const dead = p.a === 9, slp = p.a === 10; Gfx.drawPlayer(g, p.x * TS + ox, (p.y + C.PH) * TS + oy, TS / 16, { look: p.look, f: p.f, t: p.t, walk: p.walkAmt, air: !slp && (p.a & 3) === 2, swing: (p.a & 4) && !dead && !slp ? p.swingT : -1, held: p.held, head: p.head, body: p.body, dead, sleep: slp }); }
     if (S.me && !(S.dead)) { const m = S.me; Gfx.drawPlayer(g, m.x * TS + ox, (m.y + C.PH) * TS + oy, TS / 16, { look: myLook(), f: m.f, t: m.walkT, walk: m.walk ? 1 : 0, air: !S.sleeping && !m.onGround && !m.inWater, swing: m.swing, held: S.inv[S.sel] ? S.inv[S.sel][0] : 0, head: S.eq.head ? S.eq.head[0] : 0, body: S.eq.body ? S.eq.body[0] : 0, hurt: S.flash > 0.5 ? 1 : 0, sleep: S.sleeping }); }
@@ -531,12 +535,19 @@ const Game = (() => {
     g.font = `bold ${Math.max(11, Math.round(TS * 0.36))}px "Segoe UI", system-ui, sans-serif`; g.textAlign = 'center';
     const tag = (txt, x, y, host, col) => { const w = g.measureText(txt).width + 12; g.fillStyle = 'rgba(8,12,24,0.55)'; g.fillRect(x - w / 2, y - 13, w, 17); g.fillStyle = col || '#fff'; g.fillText((host ? '★ ' : '') + txt, x, y); };
     for (const p of S.players.values()) { const info = S.plist.find((q) => q.id === p.id); tag(info ? info.name : 'Player', p.x * TS + ox, (p.y - 0.45) * TS + oy, info && info.host, '#fff'); if (p.hp < p.maxhp) hpBar(p.x * TS + ox, (p.y - 0.25) * TS + oy, p.hp / p.maxhp, TS * 1.1); }
-    for (const a of (S.arrows || [])) { const ang = Math.atan2(a[3], a[2]); g.save(); g.translate(a[0] * TS + ox, a[1] * TS + oy); g.rotate(ang); g.fillStyle = '#c9a66b'; g.fillRect(-TS * 0.4, -1, TS * 0.8, Math.max(2, TS / 14)); g.fillStyle = '#d8dde6'; g.fillRect(TS * 0.4, -TS * 0.07, TS * 0.14, TS * 0.14); g.fillStyle = '#e8e8f0'; g.fillRect(-TS * 0.45, -TS * 0.07, TS * 0.12, TS * 0.14); g.restore(); }
+    for (const f of (S.boss ? S.boss.f : [])) Gfx.drawFist(g, f[0] * TS + ox, f[1] * TS + oy, TS / 16);
+    for (const a of (S.arrows || [])) { const k = a[4] || 0, px = a[0] * TS + ox, py = a[1] * TS + oy;
+      if (k === 3) { const wob = Math.sin(performance.now() / 60 + a[0] * 3) * 0.08; g.fillStyle = 'rgba(190,170,140,0.9)'; g.fillRect(px - TS * 0.35, py - TS * (0.55 + wob), TS * 0.7, TS * (0.55 + wob)); g.fillStyle = 'rgba(255,240,210,0.9)'; g.fillRect(px - TS * 0.2, py - TS * (0.75 + wob), TS * 0.4, TS * 0.2); continue; }
+      if (k === 1 || k === 2) { g.save(); g.translate(px, py); g.rotate(Math.atan2(a[3], a[2])); g.fillStyle = k === 1 ? '#b98cff' : '#ff7a90'; g.beginPath(); g.moveTo(TS * 0.45, 0); g.lineTo(0, -TS * 0.17); g.lineTo(-TS * 0.35, 0); g.lineTo(0, TS * 0.17); g.fill(); g.fillStyle = '#fff'; g.fillRect(-TS * 0.05, -TS * 0.04, TS * 0.2, TS * 0.08); g.restore(); continue; }
+      const ang = Math.atan2(a[3], a[2]); g.save(); g.translate(px, py); g.rotate(ang); g.fillStyle = '#c9a66b'; g.fillRect(-TS * 0.4, -1, TS * 0.8, Math.max(2, TS / 14)); g.fillStyle = '#d8dde6'; g.fillRect(TS * 0.4, -TS * 0.07, TS * 0.14, TS * 0.14); g.fillStyle = '#e8e8f0'; g.fillRect(-TS * 0.45, -TS * 0.07, TS * 0.12, TS * 0.14); g.restore(); }
     g.save(); for (const l of (S.lines || [])) { const pl = l[0] === S.id ? S.me : S.players.get(l[0]); if (!pl) continue; const hx = (pl.x + (pl.f || 1) * 0.55) * TS + ox, hy = (pl.y + 0.1) * TS + oy, bob = Math.sin(performance.now() / 260) * (l[3] ? 0.12 : 0.04), bx = l[1] * TS + ox, by = (l[2] + bob + (l[3] ? 0.1 : 0)) * TS + oy;
       g.strokeStyle = 'rgba(235,240,250,0.85)'; g.lineWidth = Math.max(1, TS / 16); g.beginPath(); g.moveTo(hx, hy); g.quadraticCurveTo((hx + bx) / 2, Math.min(hy, by) - TS * 0.5, bx, by); g.stroke();
       g.fillStyle = '#e04040'; g.fillRect(bx - TS * 0.1, by - TS * 0.16, TS * 0.2, TS * 0.16); g.fillStyle = '#fff'; g.fillRect(bx - TS * 0.1, by, TS * 0.2, TS * 0.1);
       if (l[3]) { g.fillStyle = '#ff5a4a'; g.font = 'bold ' + Math.round(TS * 0.9) + 'px sans-serif'; g.textAlign = 'center'; g.fillText('!', bx, by - TS * 0.5); } } g.restore();
-    for (const o of S.mobs.values()) if (o.hp < o.maxhp) hpBar(o.x * TS + ox, (o.y - 0.35) * TS + oy, o.hp / o.maxhp, TS * 0.9);
+    if (S.boss) { const bm = S.mobs.get(S.boss.id); if (bm && bm.maxhp) { const cw2 = S.cw, bw = Math.min(cw2 * 0.7, 520), bx = (cw2 - bw) / 2, by = 64, fr = Math.max(0, bm.hp / bm.maxhp);
+      g.save(); g.fillStyle = 'rgba(8,8,20,0.7)'; g.fillRect(bx - 4, by - 22, bw + 8, 36); g.fillStyle = '#d9c8ff'; g.font = 'bold 13px sans-serif'; g.textAlign = 'center'; g.fillText('HOLLOW WARDEN' + (S.boss.sh ? '  (shielded)' : S.boss.st ? '  (stunned!)' : ''), cw2 / 2, by - 8);
+      g.fillStyle = '#2a2236'; g.fillRect(bx, by, bw, 8); g.fillStyle = S.boss.ph === 1 ? '#6ad8f2' : S.boss.ph === 2 ? '#ffae40' : '#ff4a5a'; g.fillRect(bx, by, bw * fr, 8); g.fillStyle = 'rgba(255,255,255,0.7)'; for (const q of [0.33, 0.66]) g.fillRect(bx + bw * q, by - 1, 2, 10); g.restore(); } }
+    for (const o of S.mobs.values()) if (o.hp < o.maxhp && o.type !== 'warden') hpBar(o.x * TS + ox, (o.y - 0.35) * TS + oy, o.hp / o.maxhp, TS * 0.9);
     g.font = `bold ${Math.round(TS * 0.45)}px monospace`;
     for (const tx of S.texts) { const k = tx.life / tx.max; g.globalAlpha = Math.min(1, k * 2); g.fillStyle = '#000'; g.fillText(tx.txt, tx.x * TS + ox + 1, tx.y * TS + oy + 1); g.fillStyle = tx.c; g.fillText(tx.txt, tx.x * TS + ox, tx.y * TS + oy); g.globalAlpha = 1; }
     g.textAlign = 'left';
