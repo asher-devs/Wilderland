@@ -1,5 +1,6 @@
 'use strict';
 // WILDERLAND server: static file host + WebSocket game server (authoritative) + SQLite persistence.
+const zlib = require('zlib');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -35,6 +36,39 @@ const server = http.createServer((req, res) => {
       const i = info || {};
       return res.end(JSON.stringify({ code, name: live ? live.name : i.name, online: live ? live.players.size : 0, max: D.C.MAX_PLAYERS,
         w: live ? live.W : i.w, h: live ? live.H : i.h, updated: i.updated || Date.now(), players: live ? live.plist().map((p) => p.name) : [] }));
+    }
+    const ex = url.pathname.match(/^\/api\/export\/([A-Za-z0-9]{3,8})$/);
+    if (ex && req.method === 'GET') {
+      const code = ex[1].toUpperCase(), pid = String(url.searchParams.get('pid') || '');
+      try {
+        const live = worlds.get(code); if (live) live.save();
+        const rec = db.getWorld(code); if (!rec) { res.writeHead(404); return res.end('{"error":"not found"}'); }
+        const pl = db.getPlayers(code);
+        if (pid !== rec.host && !pl[pid]) { res.writeHead(403); return res.end('{"error":"not a member of this world"}'); }
+        const players = Object.entries(pl).map(([k, v]) => { const { name, ...data } = v; return { pid: k, name, data }; });
+        return res.end(JSON.stringify({ v: 1, code, name: rec.name, seed: rec.seed, w: rec.w, h: rec.h, host: rec.host, settings: rec.settings, state: rec.state, chests: rec.chests,
+          created: rec.created, saved: Date.now(), tiles: zlib.deflateSync(rec.tiles, { level: 6 }).toString('base64'), extra: rec.extra ? zlib.deflateSync(rec.extra).toString('base64') : null, players }));
+      } catch (e) { console.error('export error', e); res.writeHead(500); return res.end('{"error":"export failed"}'); }
+    }
+    if (url.pathname === '/api/import' && req.method === 'POST') {
+      const chunks = []; let n = 0;
+      req.on('data', (c) => { n += c.length; if (n > 48e6) { res.writeHead(413); res.end('{"error":"too big"}'); req.destroy(); } else chunks.push(c); });
+      req.on('end', () => {
+        try {
+          const b = JSON.parse(Buffer.concat(chunks).toString()), pid = String(b.pid || '');
+          const code = String(b.code || '').toUpperCase();
+          if (b.v !== 1 || !/^[A-Z0-9]{3,8}$/.test(code) || !b.w || !b.h) { res.writeHead(400); return res.end('{"error":"bad backup file"}'); }
+          if (!(pid === b.host || (b.players || []).some((p) => p.pid === pid))) { res.writeHead(403); return res.end('{"error":"this backup is not yours"}'); }
+          if (db.exists(code) || worlds.has(code)) { res.writeHead(409); return res.end('{"error":"world already exists on the server"}'); }
+          const tiles = zlib.inflateSync(Buffer.from(b.tiles, 'base64'));
+          if (tiles.length !== b.w * b.h) { res.writeHead(400); return res.end('{"error":"corrupt backup"}'); }
+          const extra = b.extra ? Buffer.from(b.extra, 'base64') : null;
+          db.putWorld({ code, name: String(b.name || 'World').slice(0, 24), seed: b.seed | 0, w: b.w, h: b.h, host: b.host, settings: b.settings || {}, state: b.state || {}, tiles, chests: b.chests || {}, created: b.created || Date.now(), extra,
+            players: (b.players || []).map((p) => ({ pid: String(p.pid), name: String(p.name || 'Player'), data: p.data || {} })) });
+          res.end(JSON.stringify({ ok: true, code }));
+        } catch (e) { console.error('import error', e); res.writeHead(400); res.end('{"error":"could not restore"}'); }
+      });
+      return;
     }
     res.writeHead(404); return res.end('{}');
   }

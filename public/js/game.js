@@ -71,6 +71,31 @@ const Game = (() => {
     });
   }
   function send(o) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(o)); }
+  // ---------- world backups (kept on this device; the free server host wipes saves on every deploy)
+  const Backup = (() => {
+    let dbp = null;
+    const idb = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('wilderland', 1); r.onupgradeneeded = () => r.result.createObjectStore('backups'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }));
+    const tx = async (mode, fn) => { const d = await idb(); return new Promise((res, rej) => { const t = d.transaction('backups', mode), r = fn(t.objectStore('backups')); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); }); };
+    const get = (code) => tx('readonly', (s) => s.get(code)).catch(() => null);
+    const put = (code, data) => tx('readwrite', (s) => s.put(data, code));
+    async function pull(code) {
+      const r = await fetch(httpBase() + '/api/export/' + code + '?pid=' + encodeURIComponent(playerId())); if (!r.ok) throw new Error('export ' + r.status);
+      const data = await r.json(); await put(code, data); return data;
+    }
+    async function push(data) {
+      const r = await fetch(httpBase() + '/api/import', { method: 'POST', body: JSON.stringify({ ...data, pid: playerId() }) });
+      if (r.ok || r.status === 409) return true; const j = await r.json().catch(() => ({})); throw new Error(j.error || 'restore failed');
+    }
+    /** put the backed-up world back on the server; true if restored (or already there) */
+    async function restore(code) { const d = await get(code); if (!d) return false; await push(d); return true; }
+    let timer = 0;
+    function start() { stop(); const run = () => { if (S.code && S.ws && !document.hidden) pull(S.code).catch(() => {}); }; setTimeout(run, 15000); timer = setInterval(run, 180000); }
+    function stop() { if (timer) clearInterval(timer); timer = 0; }
+    async function download(code) { const d = (await get(code)) || (await pull(code)); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' })); a.download = 'wilderland-' + code + '.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+    async function fromFile(file) { const d = JSON.parse(await file.text()); if (d.v !== 1 || !d.code) throw new Error('Not a Wilderland backup'); await push(d); await put(d.code, d); return d; }
+    return { get, pull, restore, start, stop, download, fromFile };
+  })();
+
   let reconnecting = false;
   function onClose(ws) {
     if (S.ws !== ws || S.leaving) return;
@@ -81,7 +106,7 @@ const Game = (() => {
         await new Promise((r) => setTimeout(r, i < 3 ? 1000 : 2500));
         if (S.leaving) break;
         try { const w = await open({ t: 'join', pid: playerId(), name: nm(), look: Settings.d.look, code: S.code }); applyWelcome(w, true); UI.reconnecting(false); reconnecting = false; return; }
-        catch (e) { if (/full|No world/.test(e.message)) { UI.error(e.message); leave(true); reconnecting = false; return; } }
+        catch (e) { if (/No world/.test(e.message) && !e.restored) { try { if (await Backup.restore(S.code)) continue; } catch (e2) { /* fall through */ } } if (/full|No world/.test(e.message)) { UI.error(e.message); leave(true); reconnecting = false; return; } }
       }
       reconnecting = false; if (!S.leaving) { UI.error('Lost connection to the server'); leave(true); }
     })();
@@ -110,7 +135,7 @@ const Game = (() => {
     S.running = true; S.leaving = false; S.mineProg = null;
     UI.enter(w, isReconnect);
     try { window.history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
-    rememberWorld(w);
+    rememberWorld(w); Backup.start();
     resize(); if (!raf) raf = requestAnimationFrame(frame);
   }
   function rememberWorld(w) {
@@ -121,6 +146,7 @@ const Game = (() => {
     } catch (e) { /* ignore */ }
   }
   function leave(silent) {
+    if (S.code) Backup.pull(S.code).catch(() => {}); Backup.stop();
     S.sleeping = false; UI.sleeping(false);
     S.leaving = true; S.running = false; try { S.ws && S.ws.close(); } catch (e) { /* ignore */ } S.ws = null; reconnecting = false;
     tiles = null; S.players.clear(); S.mobs.clear(); S.drops.clear(); S.particles.length = 0;
@@ -569,7 +595,7 @@ const Game = (() => {
     UI.frame(dt);
   }
   // test/debug hooks
-  window.__G = { S, get: (x, y) => get(x, y), world: () => ({ W, H, tiles, biome, surf }), send };
+  window.__G = { Backup, leave, S, get: (x, y) => get(x, y), world: () => ({ W, H, tiles, biome, surf }), send };
   function setLook(l) { Settings.d.look = l; Settings.save(); S._myLook = null; send({ t: 'look', look: l }); }
-  return { S, setLook, create, join, leave, send, setSel, url, httpBase, resize, get, keys, nm, daylight };
+  return { Backup, S, setLook, create, join, leave, send, setSel, url, httpBase, resize, get, keys, nm, daylight };
 })();

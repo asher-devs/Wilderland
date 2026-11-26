@@ -23,13 +23,19 @@ const UI = (() => {
     for (const w of list) {
       const d = document.createElement('div'); d.className = 'wi'; d.innerHTML = `<div><b></b><small></small></div><span class="st"></span>`; d.querySelector('b').textContent = w.name; d.querySelector('small').textContent = w.code + ' · ' + new Date(w.last).toLocaleDateString();
       d.onclick = () => joinCode(w.code); el.appendChild(d);
-      fetch(Game.httpBase() + '/api/world/' + w.code).then((r) => r.ok ? r.json() : null).then((i) => { const s = d.querySelector('.st'); if (!i) { s.textContent = 'offline?'; return; } s.textContent = i.online ? `● ${i.online}/${i.max} online` : 'saved'; if (i.online) s.classList.add('on'); }).catch(() => { d.querySelector('.st').textContent = 'offline?'; });
+      const dl = document.createElement('button'); dl.textContent = '⬇'; dl.title = 'Download backup file'; dl.className = 'dlb'; dl.onclick = async (ev) => { ev.stopPropagation(); try { await Game.Backup.download(w.code); } catch (e) { err('No backup available yet'); } }; d.appendChild(dl);
+      fetch(Game.httpBase() + '/api/world/' + w.code).then((r) => r.ok ? r.json() : null).then((i) => { const s = d.querySelector('.st'); if (!i) { Game.Backup.get(w.code).then((bk) => { s.textContent = bk ? 'restore ⟳' : 'offline?'; }); return; } s.textContent = i.online ? `● ${i.online}/${i.max} online` : 'saved'; if (i.online) s.classList.add('on'); }).catch(() => { d.querySelector('.st').textContent = 'offline?'; });
     }
   }
   async function joinCode(code) {
     code = (code || '').trim().toUpperCase(); if (code.length < 3) return err('Enter a room code');
-    try { await Game.join(code); } catch (e) { err(e.message); }
+    try { await Game.join(code); } catch (e) {
+      if (/No world/.test(e.message) && await Game.Backup.get(code)) { try { await Game.Backup.restore(code); await Game.join(code); return; } catch (e2) { err(e2.message); return; } }
+      err(e.message);
+    }
   }
+  $('btn-bk-file').onclick = () => $('bk-file').click();
+  $('bk-file').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { const d = await Game.Backup.fromFile(f); joinCode(d.code); } catch (x) { err(x.message || 'Could not restore'); } };
   $('btn-join').onclick = () => joinCode($('join-code').value);
   $('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinCode($('join-code').value); });
   $('btn-create').onclick = async () => {

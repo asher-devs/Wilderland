@@ -46,3 +46,6 @@ node test/browser.js     # headless Chrome, 3 browsers incl. mobile (needs puppe
 - Fishing: craft a Fishing Rod (3 planks + 4 fibre), right-click water to cast, click again the moment the bobber shows "!". Lures (2 feathers + fibre) make bites faster and rarer loot likelier. Catch fish, resources, and rarely a Golden Carp.
 - New gear: leather cap & tunic, wool blocks, fish tank; cooked fish heals a lot.
 - Tests: `node test/animals.js`, `node test/animals-ui.js` (needs a running server).
+
+## World backups
+Free hosting wipes the database on every deploy, so each player's device keeps an automatic copy of every world they play (IndexedDB, refreshed every 3 minutes and on leaving). If the server forgets a world, joining its room code — or an in-progress reconnect — restores it automatically. Worlds list: ⬇ downloads a backup file, "Restore from file" loads one. API: `GET /api/export/CODE?pid=` (members only), `POST /api/import`. Test: `node test/backup.js`.
