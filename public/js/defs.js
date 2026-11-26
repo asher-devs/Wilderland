@@ -18,7 +18,7 @@
     SANDSTONE_BRICK: 71, SMOOTH_SANDSTONE: 72, CHISELED_SANDSTONE: 73, SNOW_BRICK: 74, ICE_BRICK: 75,
     PINE_LOG: 76, MAPLE_LOG: 77, WILLOW_LOG: 78, STRIPPED_OAK: 79, STRIPPED_PINE: 80, STRIPPED_MAPLE: 81, STRIPPED_WILLOW: 82,
     PINE_PLANKS: 83, MAPLE_PLANKS: 84, WILLOW_PLANKS: 85, PARQUET: 86, BOOKSHELF: 87, BEAM: 88, HAY: 89,
-    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96,
+    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96, WOOL_BLOCK: 97, FISH_TANK: 98,
   };
   const I = {
     WOOD_PICK: 100, WOOD_AXE: 101, WOOD_SWORD: 102,
@@ -30,6 +30,7 @@
     APPLE: 117, RAW_MEAT: 118, COOKED_MEAT: 119, GEL: 120, POTION: 121,
     COPPER_HELM: 122, IRON_HELM: 123, GOLD_HELM: 124,
     COPPER_MAIL: 125, IRON_MAIL: 126, CRYSTAL_MAIL: 127, AMULET: 128, MUSHROOM: 129,
+    LEATHER: 136, WOOL: 137, FEATHER: 138, RAW_FISH: 139, COOKED_FISH: 140, FISHING_ROD: 141, LURE: 142, LEATHER_CAP: 143, LEATHER_TUNIC: 144, GOLDEN_CARP: 145,
     CLAY_BRICK: 130, FIBER: 131, WOOD_SHOVEL: 132, STONE_SHOVEL: 133, COPPER_SHOVEL: 134, IRON_SHOVEL: 135,
   };
   const TIER_NAMES = ['Hand', 'Wooden', 'Stone', 'Copper', 'Iron', 'Crystal'];
@@ -138,6 +139,8 @@
     [T.LANTERN, 'Lantern', 0.1, 0, 'soft', T.LANTERN, false, [1.0, 0.78, 0.45]],
     [T.BED, 'Bed', 0.6, 0, 'wood', T.BED, false],
     [T.BED_R, 'Bed', 0.6, 0, 'wood', -1, false],
+    [T.WOOL_BLOCK, 'Wool Block', 0.6, 0, 'soft', T.WOOL_BLOCK, true],
+    [T.FISH_TANK, 'Fish Tank', 1.0, 0, 'glass', T.FISH_TANK, true],
   ];
 
   // ---- shaped variants (slab / stairs / wall). Each gets its own tile id (200+) and a collision shape.
@@ -174,11 +177,11 @@
   const COLL = new Uint8Array(256);
   for (let i = 0; i < 256; i++) COLL[i] = SOLID[i] ? 1 : 0;
   for (const k in SHAPE) COLL[k] = SHAPE[k].box;
-  const CLEAR = new Uint8Array(256); for (const k of [T.GLASS, T.FRAMED_GLASS, T.STAINED_GLASS, T.TINTED_GLASS, T.IRON_GRATE, T.CRYSTAL_LAMP]) CLEAR[k] = 1;
+  const CLEAR = new Uint8Array(256); for (const k of [T.GLASS, T.FRAMED_GLASS, T.STAINED_GLASS, T.TINTED_GLASS, T.IRON_GRATE, T.CRYSTAL_LAMP, T.FISH_TANK]) CLEAR[k] = 1;
   const OPAQUE = new Uint8Array(256); for (let i = 0; i < 256; i++) OPAQUE[i] = SOLID[i] && !CLEAR[i] ? 1 : 0;
   const LOGS = new Uint8Array(256); for (const k of [T.LOG, T.PINE_LOG, T.MAPLE_LOG, T.WILLOW_LOG]) LOGS[k] = 1; // natural trunks
   const STRIPPED = { [T.LOG]: T.STRIPPED_OAK, [T.PINE_LOG]: T.STRIPPED_PINE, [T.MAPLE_LOG]: T.STRIPPED_MAPLE, [T.WILLOW_LOG]: T.STRIPPED_WILLOW };
-  const NEWBLOCKS = []; for (let i = 36; i <= T.BED; i++) NEWBLOCKS.push(i);
+  const NEWBLOCKS = []; for (let i = 36; i <= T.BED; i++) NEWBLOCKS.push(i); NEWBLOCKS.push(T.WOOL_BLOCK, T.FISH_TANK);
   const PLACEABLE = new Set([T.GRASS, T.DIRT, T.STONE, T.LOG, T.SAND, T.SNOW, T.COPPER, T.IRON, T.GOLD, T.CRYSTAL,
     T.SANDSTONE, T.ICE, T.CACTUS, T.PLANKS, T.BENCH, T.FURNACE, T.CHEST, T.TORCH, T.MUD, T.SLATE, ...NEWBLOCKS]);
   for (const k in SHAPE) if (SHAPE[k].item === +k) PLACEABLE.add(+k);
@@ -209,7 +212,12 @@
   tool(I.CRYSTAL_BLADE, 'Crystal Blade', 'sword', 5, 1, 900, 40);
   const mat = (id, name) => { ITEMS[id] = { id, name, stack: 99 }; };
   mat(I.COPPER_BAR, 'Copper Bar'); mat(I.IRON_BAR, 'Iron Bar'); mat(I.GOLD_BAR, 'Gold Bar'); mat(I.GEL, 'Gel');
-  mat(I.CLAY_BRICK, 'Clay Brick'); mat(I.FIBER, 'Plant Fiber');
+  mat(I.CLAY_BRICK, 'Clay Brick'); mat(I.FIBER, 'Plant Fiber'); mat(I.LEATHER, 'Leather'); mat(I.WOOL, 'Wool'); mat(I.FEATHER, 'Feather');
+  ITEMS[I.RAW_FISH] = { id: I.RAW_FISH, name: 'Raw Fish', stack: 99, heal: 5 };
+  ITEMS[I.COOKED_FISH] = { id: I.COOKED_FISH, name: 'Cooked Fish', stack: 99, heal: 38 };
+  ITEMS[I.GOLDEN_CARP] = { id: I.GOLDEN_CARP, name: 'Golden Carp', stack: 20, heal: 80 };
+  ITEMS[I.FISHING_ROD] = { id: I.FISHING_ROD, name: 'Fishing Rod', kind: 'rod', dur: 120, dmg: 2, stack: 1 };
+  ITEMS[I.LURE] = { id: I.LURE, name: 'Fishing Lure', stack: 99 };
   ITEMS[I.APPLE] = { id: I.APPLE, name: 'Apple', stack: 99, heal: 20 };
   ITEMS[I.RAW_MEAT] = { id: I.RAW_MEAT, name: 'Raw Meat', stack: 99, heal: 8 };
   ITEMS[I.COOKED_MEAT] = { id: I.COOKED_MEAT, name: 'Cooked Meat', stack: 99, heal: 45 };
@@ -218,6 +226,7 @@
   const armor = (id, name, slot, def, hp) => { ITEMS[id] = { id, name, stack: 1, armor: slot, def, hp: hp || 0 }; };
   armor(I.COPPER_HELM, 'Copper Helm', 'head', 2); armor(I.IRON_HELM, 'Iron Helm', 'head', 3); armor(I.GOLD_HELM, 'Gold Crown', 'head', 4, 10);
   armor(I.COPPER_MAIL, 'Copper Mail', 'body', 3); armor(I.IRON_MAIL, 'Iron Mail', 'body', 5); armor(I.CRYSTAL_MAIL, 'Crystal Mail', 'body', 8);
+  armor(I.LEATHER_CAP, 'Leather Cap', 'head', 1); armor(I.LEATHER_TUNIC, 'Leather Tunic', 'body', 2);
   armor(I.AMULET, 'Crystal Amulet', 'charm', 0, 40);
 
   // [output, count, [[item, n], ...], station, category]  station: hand | bench | furnace | mason
@@ -273,6 +282,13 @@
     R(T.PARQUET, 4, [[T.PLANKS, 2], [T.PINE_PLANKS, 2]], 'bench', 'wood'),
     R(T.SHINGLE, 4, [[T.MAPLE_PLANKS, 4]], 'bench', 'wood'),
     R(T.BED, 1, [[T.PLANKS, 6], [I.FIBER, 6]], 'bench', 'decor'),
+    R(I.FISHING_ROD, 1, [[T.PLANKS, 3], [I.FIBER, 4]], 'bench', 'tools'),
+    R(I.LURE, 3, [[I.FEATHER, 2], [I.FIBER, 1]], 'hand', 'tools'),
+    R(I.COOKED_FISH, 1, [[I.RAW_FISH, 1]], 'furnace', 'misc'),
+    R(I.LEATHER_CAP, 1, [[I.LEATHER, 5]], 'bench', 'tools'),
+    R(I.LEATHER_TUNIC, 1, [[I.LEATHER, 8]], 'bench', 'tools'),
+    R(T.WOOL_BLOCK, 2, [[I.WOOL, 4]], 'hand', 'decor'),
+    R(T.FISH_TANK, 1, [[T.GLASS, 6], [I.RAW_FISH, 1], [I.FIBER, 2]], 'bench', 'decor'),
     R(T.BOOKSHELF, 1, [[T.PLANKS, 6], [I.FIBER, 3]], 'bench', 'wood'),
     R(T.THATCH, 2, [[I.FIBER, 4]], 'hand', 'wood'),
     R(T.HAY, 1, [[I.FIBER, 9]], 'hand', 'wood'),
@@ -338,7 +354,7 @@
 
   // Mobs. hp, dmg(contact), speed(tiles/s), w,h, fly, drops [[item,chance,min,max]]
   const MOBS = {
-    rabbit: { name: 'Rabbit', hp: 6, dmg: 0, speed: 3.5, w: 0.7, h: 0.6, passive: true, drops: [[I.RAW_MEAT, 0.9, 1, 1]] },
+    rabbit: { name: 'Rabbit', hp: 6, dmg: 0, speed: 3.5, w: 0.7, h: 0.6, passive: true, hop: true, drops: [[I.RAW_MEAT, 0.9, 1, 1]] },
     slime: { name: 'Slime', hp: 16, dmg: 9, speed: 2.6, w: 0.9, h: 0.7, drops: [[I.GEL, 0.9, 1, 3], [I.APPLE, 0.08, 1, 1]] },
     zombie: { name: 'Zombie', hp: 26, dmg: 14, speed: 2.4, w: 0.7, h: 1.7, drops: [[I.RAW_MEAT, 0.45, 1, 2], [I.APPLE, 0.15, 1, 1], [T.PLANKS, 0.3, 1, 3]] },
     scorpion: { name: 'Sand Scorpion', hp: 24, dmg: 13, speed: 3.6, w: 1.0, h: 0.6, drops: [[I.RAW_MEAT, 0.5, 1, 1], [I.COPPER_BAR, 0.15, 1, 2], [I.GOLD_BAR, 0.05, 1, 1]] },
@@ -347,7 +363,35 @@
     frog: { name: 'Bog Frog', hp: 11, dmg: 6, speed: 2.8, w: 0.6, h: 0.5, drops: [[I.GEL, 0.5, 1, 1], [I.RAW_MEAT, 0.4, 1, 1]] },
     wolf: { name: 'Grey Wolf', hp: 34, dmg: 16, speed: 4.6, w: 1.2, h: 0.85, drops: [[I.RAW_MEAT, 0.85, 1, 2]] },
     crawler: { name: 'Crystal Crawler', hp: 70, dmg: 24, speed: 4.4, w: 1.1, h: 0.8, glow: [0.8, 0.5, 1], drops: [[T.CRYSTAL, 0.6, 1, 3], [I.IRON_BAR, 0.4, 1, 3], [I.GOLD_BAR, 0.25, 1, 2], [I.COOKED_MEAT, 0.3, 1, 2]] },
+      // ---- animals (peaceful; they live in the world even on Peaceful difficulty)
+    cow: { name: 'Cow', hp: 14, dmg: 0, speed: 1.7, w: 1.5, h: 1.2, passive: true, animal: true, drops: [[I.RAW_MEAT, 1, 1, 3], [I.LEATHER, 0.8, 1, 2]] },
+    pig: { name: 'Pig', hp: 10, dmg: 0, speed: 1.9, w: 1.1, h: 0.8, passive: true, animal: true, drops: [[I.RAW_MEAT, 1, 1, 2]] },
+    sheep: { name: 'Sheep', hp: 10, dmg: 0, speed: 1.9, w: 1.2, h: 1.0, passive: true, animal: true, drops: [[I.WOOL, 1, 1, 2], [I.RAW_MEAT, 0.6, 1, 1]] },
+    chicken: { name: 'Chicken', hp: 5, dmg: 0, speed: 2.4, w: 0.7, h: 0.75, passive: true, animal: true, drops: [[I.FEATHER, 1, 1, 2], [I.RAW_MEAT, 0.7, 1, 1]] },
+    deer: { name: 'Deer', hp: 16, dmg: 0, speed: 4.0, w: 1.5, h: 1.5, passive: true, animal: true, flee: 9, drops: [[I.RAW_MEAT, 1, 2, 3], [I.LEATHER, 0.5, 1, 1]] },
+    fox: { name: 'Fox', hp: 12, dmg: 0, speed: 3.8, w: 1.1, h: 0.8, passive: true, animal: true, flee: 8, drops: [[I.RAW_MEAT, 0.8, 1, 1], [I.LEATHER, 0.35, 1, 1]] },
+    camel: { name: 'Camel', hp: 26, dmg: 0, speed: 1.8, w: 1.9, h: 1.7, passive: true, animal: true, drops: [[I.RAW_MEAT, 1, 2, 3], [I.LEATHER, 0.8, 1, 2]] },
+    penguin: { name: 'Penguin', hp: 8, dmg: 0, speed: 1.5, w: 0.7, h: 0.9, passive: true, animal: true, drops: [[I.RAW_FISH, 0.8, 1, 1], [I.FEATHER, 0.5, 1, 1]] },
+    turtle: { name: 'Turtle', hp: 14, dmg: 0, speed: 0.9, w: 1.0, h: 0.6, passive: true, animal: true, flee: 3, drops: [[I.RAW_MEAT, 0.7, 1, 1]] },
+    bird: { name: 'Songbird', hp: 3, dmg: 0, speed: 3.2, w: 0.5, h: 0.4, passive: true, animal: true, fly: true, drops: [[I.FEATHER, 0.8, 1, 1]] },
+    fish: { name: 'Fish', hp: 3, dmg: 0, speed: 1.9, w: 0.8, h: 0.4, passive: true, animal: true, swim: true, drops: [[I.RAW_FISH, 1, 1, 1]] },
+    bear: { name: 'Brown Bear', hp: 45, dmg: 15, speed: 3.2, w: 1.7, h: 1.3, neutral: true, animal: true, drops: [[I.RAW_MEAT, 1, 2, 3], [I.LEATHER, 1, 1, 2]] },
   };
+
+  /** fishing loot: [item, weight, min, max, condition]  condition: null | biome index | 'cave' (rare weights double with a lure) */
+  const FISH_LOOT = [
+    [I.RAW_FISH, 52, 1, 1, null], [I.FIBER, 12, 1, 2, null], [T.CLAY, 5, 1, 2, null],
+    [T.ICE, 10, 1, 2, 2], [T.MUD, 10, 1, 2, 5], [T.SAND, 8, 1, 2, 1], [T.SLATE, 6, 1, 1, 4],
+    [I.GEL, 6, 1, 2, 'cave'], [T.CRYSTAL, 3, 1, 1, 'cave'],
+    [I.COPPER_BAR, 3, 1, 1, 'rare'], [I.IRON_BAR, 1.5, 1, 1, 'rare'], [I.GOLD_BAR, 0.8, 1, 1, 'rare'], [I.POTION, 1, 1, 1, 'rare'], [I.GOLDEN_CARP, 1.2, 1, 1, 'rare'],
+  ];
+  /** pick a catch. biome: biome index; cave: bool; lure: bool; rnd: () => [0,1) */
+  function rollCatch(biome, cave, lure, rnd) {
+    const list = FISH_LOOT.filter((e) => e[4] === null || e[4] === 'rare' || e[4] === biome || (e[4] === 'cave' && cave)).map((e) => [e, e[4] === 'rare' && lure ? e[1] * 2.2 : e[1]]);
+    let tot = 0; for (const [, w] of list) tot += w; let r = rnd() * tot;
+    for (const [e, w] of list) { if ((r -= w) <= 0) return [e[0], e[2] + Math.floor(rnd() * (e[3] - e[2] + 1))]; }
+    return [I.RAW_FISH, 1];
+  }
 
   const C = {
     INV: 50, HOTBAR: 10, STACK: 99, REACH: 5.6, PW: 0.62, PH: 1.7, PLAYER_HP: 100, MAX_PLAYERS: 4,
@@ -432,5 +476,5 @@
   function toolWear(id) { const b = BLOCKS[id]; return b && b.hard >= 6 ? 2 : 1; }
   /** message when `it` can't mine `id` */
   function needText(id) { const b = BLOCKS[id]; return `${b ? b.name : 'This block'} needs a ${TIER_NAMES[Math.min(5, b ? b.tier : 1)]} Pickaxe or better`; }
-  return { LEAF, DECOR, COLL, BOXES, SHAPE, SHAPE_OF, SHAPED, WALLED, CLEAR, OPAQUE, LOGS, STRIPPED, CATS, TIER_NAMES, canMine, toolWear, needText, BIOMES, T, I, BLOCKS, ITEMS, RECIPES, MOBS, C, SOLID, PLACEABLE, isSolidTile, moveBody, maxHpFor, defenseFor, mineTime, empty };
+  return { FISH_LOOT, rollCatch, LEAF, DECOR, COLL, BOXES, SHAPE, SHAPE_OF, SHAPED, WALLED, CLEAR, OPAQUE, LOGS, STRIPPED, CATS, TIER_NAMES, canMine, toolWear, needText, BIOMES, T, I, BLOCKS, ITEMS, RECIPES, MOBS, C, SOLID, PLACEABLE, isSolidTile, moveBody, maxHpFor, defenseFor, mineTime, empty };
 });

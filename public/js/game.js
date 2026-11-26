@@ -166,6 +166,7 @@ const Game = (() => {
       p.tx = a[1]; p.ty = a[2]; p.vx = a[3]; p.vy = a[4]; p.f = a[5]; p.a = a[6]; p.held = a[7]; p.hp = a[8]; p.maxhp = a[9]; p.head = a[10]; p.body = a[11];
     }
     for (const id of S.players.keys()) if (!seen.has(id)) S.players.delete(id);
+    S.lines = m.fl || [];
     const seenM = new Set();
     for (const a of m.m) { seenM.add(a[0]); let o = S.mobs.get(a[0]); if (!o) { o = { id: a[0], type: a[1], x: a[2], y: a[3], t: Math.random() * 9, w: MOBS[a[1]].w, h: MOBS[a[1]].h, px: a[2], py: a[3] }; S.mobs.set(a[0], o); } o.tx = a[2]; o.ty = a[3]; o.f = a[4]; o.hp = a[5]; o.maxhp = a[6]; o.hurt = a[7]; }
     for (const id of S.mobs.keys()) if (!seenM.has(id)) S.mobs.delete(id);
@@ -186,6 +187,9 @@ const Game = (() => {
         else for (let i = 0; i < 4; i++) part(x, y, (Math.random() - 0.5) * 3, -Math.random() * 1.5, 0.7, Gfx.avg(v).map((c) => c + 25), 4, -0.1);
         break; }
       case 'tree': { Sound.play('treefall'); S.falling.push({ x, y, lg: v.lg || T.LOG, h: v.h, dir: v.dir, leaves: v.leaves, t: 0, thud: false }); break; }
+      case 'cast': Sound.play('splash'); for (let i = 0; i < 6; i++) part(x, y, (Math.random() - 0.5) * 3, -Math.random() * 3, 0.5, [170, 215, 255], 2); break;
+      case 'bite': Sound.play('splash'); S.texts.push({ x, y: y - 0.9, txt: '!', life: 0.9, max: 0.9, c: '#ff5a4a' }); for (let i = 0; i < 8; i++) part(x, y, (Math.random() - 0.5) * 4, -Math.random() * 4, 0.5, [190, 225, 255], 2); break;
+      case 'catch': Sound.play('splash'); for (let i = 0; i < 12; i++) part(x, y, (Math.random() - 0.5) * 5, -Math.random() * 7, 0.7, [190, 225, 255], 3); break;
       case 'place': Sound.play('place', v); burst(x, y, v, 3, 0.4); break;
       case 'mobhit': Sound.play('mobhit'); S.texts.push({ x, y: y - 0.6, txt: String(v), life: 0.9, max: 0.9, c: '#ffd36a' }); for (let i = 0; i < 6; i++) part(x, y, (Math.random() - 0.5) * 6, -Math.random() * 5, 0.5, [255, 90, 70], 3); break;
       case 'mobdie': Sound.play('mobdie'); for (let i = 0; i < 16; i++) part(x, y, (Math.random() - 0.5) * 7, -Math.random() * 6, 0.7, [220, 220, 240], 4, 0.6); break;
@@ -293,6 +297,7 @@ const Game = (() => {
         if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
         else if (a.edge && (id === T.BED || id === T.BED_R) && inReach(tx, ty)) { send({ t: 'sleep', x: tx, y: ty }); }
         else if (a.edge && (id === T.BENCH || id === T.FURNACE || id === T.MASON) && inReach(tx, ty)) { UI.openInventory(); }
+        else if (it && it.kind === 'rod') { if (now > placeT) { placeT = now + 450; send({ t: 'fish', a: 'cast', x: tx, y: ty }); m.swing = 0; acting = true; } }
         else if (it && it.kind === 'axe' && DEFS.STRIPPED[id] && inReach(tx, ty)) { if (now > placeT) { placeT = now + 350; send({ t: 'place', x: tx, y: ty }); acting = true; } }
         else if (it && it.block !== undefined) { if (now > placeT && inReach(tx, ty)) { placeT = now + 120; send({ t: 'place', x: tx, y: ty }); acting = true; } }
         else if (it && it.heal && now > useT) { useT = now + 350; send({ t: 'use' }); }
@@ -444,7 +449,7 @@ const Game = (() => {
     // drops
     for (const d of S.drops.values()) { const sx = d.x * TS + ox, sy = (d.y) * TS + oy + Math.sin(d.t * 3) * TS * 0.06 - TS * 0.2; const sz = TS * 0.5; g.drawImage(Gfx.icon(d.item), sx - sz / 2, sy - sz / 2, sz, sz); if (d.n > 1) { g.fillStyle = '#fff'; g.font = `${Math.round(TS * 0.3)}px monospace`; g.fillText(d.n, sx + sz / 3, sy + sz / 1.5); } }
     // mobs
-    for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16, { f: o.f, t: o.t, hurt: o.hurt, air: o.air });
+    for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16, { f: o.f, t: o.t, hurt: o.hurt, air: o.air, id: o.id, moving: Math.abs(o.tx - o.x) > 0.004 || Math.abs(o.ty - o.y) > 0.004, angry: MOBS[o.type].neutral && o.hurt });
     // other players
     for (const p of S.players.values()) { const dead = p.a === 9, slp = p.a === 10; Gfx.drawPlayer(g, p.x * TS + ox, (p.y + C.PH) * TS + oy, TS / 16, { look: p.look, f: p.f, t: p.t, walk: p.walkAmt, air: !slp && (p.a & 3) === 2, swing: (p.a & 4) && !dead && !slp ? p.swingT : -1, held: p.held, head: p.head, body: p.body, dead, sleep: slp }); }
     if (S.me && !(S.dead)) { const m = S.me; Gfx.drawPlayer(g, m.x * TS + ox, (m.y + C.PH) * TS + oy, TS / 16, { look: myLook(), f: m.f, t: m.walkT, walk: m.walk ? 1 : 0, air: !S.sleeping && !m.onGround && !m.inWater, swing: m.swing, held: S.inv[S.sel] ? S.inv[S.sel][0] : 0, head: S.eq.head ? S.eq.head[0] : 0, body: S.eq.body ? S.eq.body[0] : 0, hurt: S.flash > 0.5 ? 1 : 0, sleep: S.sleeping }); }
@@ -488,6 +493,10 @@ const Game = (() => {
     g.font = `bold ${Math.max(11, Math.round(TS * 0.36))}px "Segoe UI", system-ui, sans-serif`; g.textAlign = 'center';
     const tag = (txt, x, y, host, col) => { const w = g.measureText(txt).width + 12; g.fillStyle = 'rgba(8,12,24,0.55)'; g.fillRect(x - w / 2, y - 13, w, 17); g.fillStyle = col || '#fff'; g.fillText((host ? '★ ' : '') + txt, x, y); };
     for (const p of S.players.values()) { const info = S.plist.find((q) => q.id === p.id); tag(info ? info.name : 'Player', p.x * TS + ox, (p.y - 0.45) * TS + oy, info && info.host, '#fff'); if (p.hp < p.maxhp) hpBar(p.x * TS + ox, (p.y - 0.25) * TS + oy, p.hp / p.maxhp, TS * 1.1); }
+    g.save(); for (const l of (S.lines || [])) { const pl = l[0] === S.id ? S.me : S.players.get(l[0]); if (!pl) continue; const hx = (pl.x + (pl.f || 1) * 0.55) * TS + ox, hy = (pl.y + 0.1) * TS + oy, bob = Math.sin(performance.now() / 260) * (l[3] ? 0.12 : 0.04), bx = l[1] * TS + ox, by = (l[2] + bob + (l[3] ? 0.1 : 0)) * TS + oy;
+      g.strokeStyle = 'rgba(235,240,250,0.85)'; g.lineWidth = Math.max(1, TS / 16); g.beginPath(); g.moveTo(hx, hy); g.quadraticCurveTo((hx + bx) / 2, Math.min(hy, by) - TS * 0.5, bx, by); g.stroke();
+      g.fillStyle = '#e04040'; g.fillRect(bx - TS * 0.1, by - TS * 0.16, TS * 0.2, TS * 0.16); g.fillStyle = '#fff'; g.fillRect(bx - TS * 0.1, by, TS * 0.2, TS * 0.1);
+      if (l[3]) { g.fillStyle = '#ff5a4a'; g.font = 'bold ' + Math.round(TS * 0.9) + 'px sans-serif'; g.textAlign = 'center'; g.fillText('!', bx, by - TS * 0.5); } } g.restore();
     for (const o of S.mobs.values()) if (o.hp < o.maxhp) hpBar(o.x * TS + ox, (o.y - 0.35) * TS + oy, o.hp / o.maxhp, TS * 0.9);
     g.font = `bold ${Math.round(TS * 0.45)}px monospace`;
     for (const tx of S.texts) { const k = tx.life / tx.max; g.globalAlpha = Math.min(1, k * 2); g.fillStyle = '#000'; g.fillText(tx.txt, tx.x * TS + ox + 1, tx.y * TS + oy + 1); g.fillStyle = tx.c; g.fillText(tx.txt, tx.x * TS + ox, tx.y * TS + oy); g.globalAlpha = 1; }

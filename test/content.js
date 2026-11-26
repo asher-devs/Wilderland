@@ -54,6 +54,7 @@ while (changed) {
   const picks = [...have].filter((id) => ITEMS[id] && ITEMS[id].kind === 'pick').map((id) => ITEMS[id]);
   const best = picks.sort((a, b) => b.tier - a.tier)[0] || null;
   for (const k of natural) { if (typeof k === 'string') continue; const b = BLOCKS[k]; if (!b || !isFinite(b.hard)) continue; if (D.canMine(k, best) && b.drop >= 0 && add(b.drop)) changed = true; }
+  if (have.has(I.FISHING_ROD)) for (const e of D.FISH_LOOT) if (add(e[0])) changed = true;
   const hasAxe = [...have].some((id) => ITEMS[id] && ITEMS[id].kind === 'axe');
   if (hasAxe) for (const k in D.STRIPPED) if (have.has(+k) && add(D.STRIPPED[k])) changed = true;
   const stn = { hand: true, bench: have.has(T.BENCH), furnace: have.has(T.FURNACE), mason: have.has(T.MASON) };

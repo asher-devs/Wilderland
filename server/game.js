@@ -169,6 +169,7 @@ class World {
       case 'sel': p.sel = Math.max(0, Math.min(C.HOTBAR - 1, m.i | 0)); return;
       case 'sort': return this.onSort(p);
       case 'sleep': return this.onSleep(p, m);
+      case 'fish': return this.onFish(p, m);
       case 'wake': return this.wake(p);
       case 'swap': return this.onSwap(p, m);
       case 'craft': return this.onCraft(p, m);
@@ -319,6 +320,7 @@ class World {
   }
   hurtMob(mob, dmg, dir, p) {
     dmg = Math.max(1, Math.round(dmg));
+    if (MOBS[mob.type].neutral) mob.angry = 20; else if (MOBS[mob.type].animal) mob.scared = 6;
     mob.hp -= dmg; mob.hurt = 0.3; mob.vx = dir * 7; mob.vy = -6; mob.ground = false;
     this.fx.push(['mobhit', mob.x, mob.y + mob.h / 2, dmg]);
     if (mob.hp <= 0) {
@@ -493,6 +495,8 @@ class World {
     // spawning
     this.spawnT -= dt;
     if (this.spawnT <= 0 && this.settings.mobs && this.players.size) { this.spawnT = 1.0; this.trySpawn(night); }
+    this.animalT = (this.animalT || 0) - dt; if (this.animalT <= 0 && this.players.size) { this.animalT = 2.2; this.trySpawnAnimals(night); }
+    this.stepFishing(dt);
     // mobs
     for (const mob of this.mobs.values()) this.stepMob(mob, dt, night, solid);
     // drops
@@ -515,7 +519,7 @@ class World {
     }
     // contact damage
     for (const mob of this.mobs.values()) {
-      if (!mob.dmg) continue;
+      if (!mob.dmg || (MOBS[mob.type].neutral && !(mob.angry > 0))) continue;
       for (const p of this.players.values()) {
         if (p.dead || p.invul > 0) continue;
         if (Math.abs(mob.x - p.x) < (mob.w + p.w) / 2 && mob.y < p.y + p.h && mob.y + mob.h > p.y) this.hurtPlayer(p, mob.dmg, mob.x < p.x ? 1 : -1, mob.name);
@@ -529,7 +533,7 @@ class World {
     this.send(p, { t: 'kb', vx: dir * 7, vy: -7 });
     this.fx.push(['hurt', p.x, p.y + 0.8, p.id]);
     if (p.hp <= 0) {
-      p.hp = 0; p.dead = true; p.deadT = 3.5; p.mine = null; p.sleep = null; p.chest = null;
+      p.hp = 0; p.dead = true; p.deadT = 3.5; p.mine = null; p.sleep = null; p.line = null; p.chest = null;
       this.fx.push(['die', p.x, p.y + 0.8, p.id]);
       this.sys(`${p.name} was slain by a ${by || 'monster'}`);
       this.send(p, { t: 'dead', by: by || 'monster' });
@@ -541,10 +545,10 @@ class World {
   }
   trySpawn(night) {
     const diff = DIFF[this.settings.difficulty] || DIFF.normal;
-    if (this.mobs.size >= 44) return;
+    if (this.mobs.size >= 70) return;
     for (const p of this.players.values()) {
       if (p.dead) continue;
-      let near = 0; for (const m of this.mobs.values()) if (Math.abs(m.x - p.x) < 60 && Math.abs(m.y - p.y) < 40) near++;
+      let near = 0; for (const m of this.mobs.values()) if (!MOBS[m.type].animal && Math.abs(m.x - p.x) < 60 && Math.abs(m.y - p.y) < 40) near++;
       const cap = Math.round((night ? 10 : 5) * diff.spawn); if (near >= cap) continue;
       if (Math.random() > 0.55 * diff.spawn + 0.15) continue;
       const depth = p.y - this.surf[Math.max(0, Math.min(this.W - 1, Math.floor(p.x)))];
@@ -586,9 +590,9 @@ class World {
   }
   addMob(type, x, y, depthF, diff) {
     const def = MOBS[type];
-    const hpMul = (def.passive ? 1 : (1 + depthF * 1.1) * diff.hp), dmgMul = (1 + depthF * 0.7) * diff.dmg;
+    const hpMul = (def.passive || def.neutral ? 1 : (1 + depthF * 1.1) * diff.hp), dmgMul = (1 + depthF * 0.7) * diff.dmg;
     const mob = { id: this.nextId++, type, name: def.name, x, y, w: def.w, h: def.h, vx: 0, vy: 0, hp: Math.round(def.hp * hpMul), maxhp: Math.round(def.hp * hpMul),
-      dmg: Math.round(def.dmg * dmgMul), f: 1, hurt: 0, t: Math.random() * 3, dir: 0, step: type !== 'slime' && !def.fly, onGround: false, kind: 'mob', grav: def.fly ? 0 : 1 };
+      dmg: def.neutral ? def.dmg : Math.round(def.dmg * dmgMul), f: 1, hurt: 0, t: Math.random() * 3, dir: 0, step: type !== 'slime' && !def.fly, onGround: false, kind: 'mob', grav: def.fly ? 0 : 1 };
     this.mobs.set(mob.id, mob); return mob;
   }
   stepMob(mob, dt, night, solid) {
@@ -602,10 +606,22 @@ class World {
       if (mob.hp <= 0) { this.mobs.delete(mob.id); return; }
     }
     mob.t += dt; if (mob.hurt > 0) mob.hurt -= dt;
-    const aggro = def.passive ? 0 : (def.fly ? 20 : 24);
+    if (mob.angry > 0) mob.angry -= dt; if (mob.scared > 0) mob.scared -= dt;
+    const aggro = def.passive ? 0 : def.neutral ? (mob.angry > 0 ? 30 : 0) : (def.fly ? 20 : 24);
     const target = !def.passive && nd < aggro ? nearest : null;
+    if (def.swim) return this.stepFish(mob, dt, solid);
     const cx = mob.x, cy = mob.y + mob.h / 2;
     if (def.fly) {
+      if (def.passive) { // songbirds: flutter around near the treetops, flee from players
+        const sy = this.surf[Math.max(0, Math.min(this.W - 1, Math.floor(cx)))];
+        if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 1 + Math.random() * 2.5; mob.dir = Math.random() * 6.28; }
+        let ax = Math.cos(mob.dir) * 0.6, ay = Math.sin(mob.dir) * 0.5 + (cy > sy - 3 ? -0.5 : 0) + (cy < sy - 12 ? 0.6 : 0);
+        if (nd < 5 || mob.scared > 0) { ax = cx < nearest.x ? -1.4 : 1.4; ay = -0.5; }
+        const spd = def.speed * (mob.hurt > 0 ? 0.2 : 1);
+        mob.vx += (ax * spd - mob.vx) * Math.min(1, dt * 3.5); mob.vy += (ay * spd - mob.vy) * Math.min(1, dt * 3.5);
+        D.moveBody(mob, dt, solid); if (mob.hitX) mob.dir = Math.PI - mob.dir; if (mob.hitY) mob.dir = -mob.dir; if (mob.vx) mob.f = mob.vx > 0 ? 1 : -1;
+        if (night && nd > 25 && Math.random() < dt * 0.05) this.mobs.delete(mob.id); return;
+      }
       let tx = cx, ty = cy;
       if (target) { tx = target.x; ty = target.y + 0.8; }
       else if (mob.t % 3 < dt) { mob.dir = Math.random() * 6.28; }
@@ -626,12 +642,23 @@ class World {
     if (mob.hurt <= 0) {
       let dir = 0;
       if (def.passive) {
-        let flee = null; for (const p of this.players.values()) if (!p.dead && Math.abs(p.x - cx) < 6 && Math.abs(p.y - mob.y) < 4) flee = p;
+        const fr = def.flee || 6; let flee = null; for (const p of this.players.values()) if (!p.dead && Math.abs(p.x - cx) < fr && Math.abs(p.y - mob.y) < 4) flee = p;
+        if (!flee && mob.scared > 0) flee = nearest;
         if (flee) dir = cx < flee.x ? -1 : 1;
-        else { if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 1 + Math.random() * 3; mob.dir = Math.random() < 0.4 ? 0 : (Math.random() < 0.5 ? -1 : 1); } dir = mob.dir; }
-        if (mob.onGround && (dir !== 0) && (mob.t > (mob.hopT || 0))) { mob.vy = -7.5; mob.hopT = mob.t + 0.5 + Math.random() * 0.5; }
-        mob.vx = dir * (flee ? def.speed * 1.5 : def.speed * 0.6) * (mob.onGround || mob.vy < 0 ? 1 : 0.7);
-        if (!dir) mob.vx = 0;
+        else { if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 1.5 + Math.random() * 4; mob.dir = Math.random() < 0.45 ? 0 : (Math.random() < 0.5 ? -1 : 1); } dir = mob.dir; }
+        if (def.hop) {
+          if (mob.onGround && (dir !== 0) && (mob.t > (mob.hopT || 0))) { mob.vy = -7.5; mob.hopT = mob.t + 0.5 + Math.random() * 0.5; }
+          mob.vx = dir * (flee ? def.speed * 1.5 : def.speed * 0.6) * (mob.onGround || mob.vy < 0 ? 1 : 0.7);
+        } else { // walkers: steady stride, step up single blocks, hop only to clear a wall
+          const want = dir * (flee ? def.speed * 1.7 : def.speed * 0.7);
+          mob.vx += (want - mob.vx) * Math.min(1, dt * 7);
+          if (mob.hitX && mob.onGround && dir && mob.t > (mob.hopT || 0)) { mob.vy = -9.5; mob.hopT = mob.t + 0.8; }
+          if (def.animal && !flee && mob.onGround && dir) { // don't wander into water or off cliffs
+            const ax = Math.floor(cx + dir * (def.w / 2 + 0.6)); let gy = Math.floor(mob.y + mob.h) , n = 0; while (!this.solid(ax, gy) && n++ < 3) gy++;
+            if (!this.solid(ax, gy) || this.get(ax, gy - 1) === T.WATER) { mob.dir = -dir; mob.vx = 0; }
+          }
+        }
+        if (!dir) mob.vx *= 0.6;
       } else if (mob.type === 'slime' || mob.type === 'frog') {
         if (target) dir = target.x < cx ? -1 : 1; else { if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 1.5 + Math.random() * 2; mob.dir = Math.random() < 0.3 ? 0 : (Math.random() < 0.5 ? -1 : 1); } dir = mob.dir; }
         if (mob.onGround) {
@@ -651,6 +678,109 @@ class World {
     mob.ground = mob.onGround;
   }
 
+  // ---------------------------------------------------------------- animals
+  animalFor(b, night) {
+    const r = Math.random();
+    switch (b) {
+      case 0: return night ? (r < 0.5 ? 'fox' : r < 0.75 ? 'deer' : 'bear') : (r < 0.28 ? 'deer' : r < 0.45 ? 'pig' : r < 0.6 ? 'fox' : r < 0.7 ? 'bear' : 'bird');
+      case 3: return night ? (r < 0.5 ? 'cow' : 'sheep') : (r < 0.28 ? 'cow' : r < 0.5 ? 'sheep' : r < 0.66 ? 'pig' : r < 0.82 ? 'chicken' : r < 0.92 ? 'deer' : 'bird');
+      case 1: return night ? 'camel' : (r < 0.7 ? 'camel' : 'fox');
+      case 2: return r < 0.55 ? 'penguin' : r < 0.8 ? 'fox' : 'bear';
+      case 4: return r < 0.3 ? 'sheep' : r < 0.55 ? 'deer' : r < 0.75 ? 'bear' : night ? 'sheep' : 'bird';
+      default: return r < 0.55 ? 'turtle' : r < 0.8 ? 'chicken' : night ? 'turtle' : 'bird';
+    }
+  }
+  trySpawnAnimals(night) {
+    if (this.settings.animals === false) return;
+    for (const p of this.players.values()) {
+      if (p.dead) continue;
+      let land = 0, fish = 0;
+      for (const m of this.mobs.values()) { if (Math.abs(m.x - p.x) > 60 || Math.abs(m.y - p.y) > 40) continue; const dd = MOBS[m.type]; if (dd.swim) fish++; else if (dd.animal) land++; }
+      // surface animals (only when the player is near the surface)
+      const depth = p.y - this.surf[Math.max(0, Math.min(this.W - 1, Math.floor(p.x)))];
+      if (land < (night ? 3 : 7) && depth < 18 && Math.random() < 0.6) {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const x = Math.floor(p.x + (Math.random() < 0.5 ? -1 : 1) * (14 + Math.random() * 30)); if (x < 3 || x >= this.W - 3) continue;
+          const type = this.animalFor(this.biome[x], night), def = MOBS[type], y = this.top[x] - 1;
+          const gv = this.get(x, y + 1); if (!(gv === T.GRASS || gv === T.SAND || gv === T.SNOW || gv === T.DIRT || gv === T.MUD)) continue;
+          if (this.get(x, y) !== T.AIR && !D.DECOR[this.get(x, y)]) continue; if (def.h > 1 && this.solid(x, y - 1)) continue;
+          if (Math.hypot(x - p.x, y - p.y) < 12) continue;
+          this.addMob(type, x + 0.5, def.fly ? y - 4 : y + 1 - def.h, 0, DIFF.normal); break;
+        }
+      }
+      // fish in nearby water
+      if (fish < 6 && Math.random() < 0.5) {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const x = Math.floor(p.x + (Math.random() - 0.5) * 70); if (x < 4 || x >= this.W - 4) continue;
+          const y0 = Math.max(4, Math.floor(this.surf[x] - 3)), ys = []; for (let y = y0; y < Math.min(this.H - 6, y0 + 45); y++) if (this.get(x, y) === T.WATER && this.get(x, y + 1) === T.WATER && this.get(x - 1, y) === T.WATER && this.get(x + 1, y) === T.WATER) ys.push(y);
+          if (!ys.length) continue; const y = ys[Math.floor(Math.random() * ys.length)];
+          if (Math.hypot(x - p.x, y - p.y) < 5) continue;
+          this.addMob('fish', x + 0.5, y + 0.3, 0, DIFF.normal); break;
+        }
+      }
+    }
+  }
+  stepFish(mob, dt, solid) {
+    const cx = mob.x, cy = mob.y + mob.h / 2, here = this.get(Math.floor(cx), Math.floor(cy)) === T.WATER;
+    mob.t += dt; if (mob.hurt > 0) mob.hurt -= dt;
+    if (!here) { // out of water: flop around and slowly suffocate
+      mob.vy = Math.min(C.MAXFALL, mob.vy + C.GRAVITY * dt); mob.vx *= 0.9; D.moveBody(mob, dt, solid);
+      mob.hp -= 0.8 * dt; if (mob.hp <= 0) this.mobs.delete(mob.id); return;
+    }
+    if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 1 + Math.random() * 3; mob.dir = Math.random() * 6.28; mob.spd = Math.random() < 0.3 ? 0 : 1; }
+    let ax = Math.cos(mob.dir) * (mob.spd ?? 1), ay = Math.sin(mob.dir) * 0.35 * (mob.spd ?? 1);
+    // scatter from nearby players that are splashing around (fast) – a calm fish just wanders
+    for (const p of this.players.values()) if (!p.dead && Math.abs(p.x - cx) < 3 && Math.abs(p.y + 0.8 - cy) < 3 && (Math.abs(p.vx) > 5)) { ax = cx < p.x ? -1.6 : 1.6; break; }
+    const sp = MOBS[mob.type].speed * (mob.hurt > 0 ? 0.2 : 1);
+    mob.vx += (ax * sp - mob.vx) * Math.min(1, dt * 3); mob.vy += (ay * sp - mob.vy) * Math.min(1, dt * 3);
+    // stay in the water
+    const nx = Math.floor(cx + mob.vx * 0.5 + Math.sign(mob.vx) * 0.5), ny = Math.floor(cy + mob.vy * 0.5);
+    if (this.get(nx, Math.floor(cy)) !== T.WATER) { mob.vx = -mob.vx * 0.6; mob.dir = Math.PI - mob.dir; }
+    if (this.get(Math.floor(cx), ny) !== T.WATER || this.get(Math.floor(cx), Math.floor(cy - 0.45)) !== T.WATER && mob.vy < 0) { mob.vy = Math.abs(mob.vy) * (this.get(Math.floor(cx), ny) !== T.WATER && mob.vy > 0 ? -0.6 : 0.4); mob.dir = -mob.dir; }
+    D.moveBody(mob, dt, solid);
+    if (mob.hitX) { mob.dir = Math.PI - mob.dir; } if (mob.hitY) mob.dir = -mob.dir;
+    if (Math.abs(mob.vx) > 0.1) mob.f = mob.vx > 0 ? 1 : -1;
+  }
+
+  // ---------------------------------------------------------------- fishing
+  /** cast / reel with a fishing rod. m = { a: 'cast', x, y } | { a: 'reel' } */
+  onFish(p, m) {
+    if (p.dead || p.sleep) return;
+    const s = p.inv[p.sel], it = s && ITEMS[s[0]]; if (!it || it.kind !== 'rod') { p.line = null; return; }
+    if (m.a === 'reel' || p.line) {
+      if (!p.line) return; const ln = p.line;
+      if (ln.st === 1) this.catchFish(p, s);
+      else this.send(p, { t: 'toast', m: 'You reeled in too early' });
+      p.line = null; return;
+    }
+    const x = m.x | 0; let y = m.y | 0;
+    if (!(x > 1 && x < this.W - 1 && y > 1 && y < this.H - 2) || this.get(x, y) !== T.WATER) return this.send(p, { t: 'toast', m: 'Aim at water to cast' });
+    if (Math.hypot(x + 0.5 - p.x, y + 0.5 - (p.y + 0.8)) > 9.5) return this.send(p, { t: 'toast', m: 'Too far — step closer to the water' });
+    while (this.get(x, y - 1) === T.WATER) y--;
+    let lure = false; for (const q of p.inv) if (q && q[0] === I.LURE) { lure = true; if (--q[1] <= 0) p.inv[p.inv.indexOf(q)] = null; p.invDirty = true; break; }
+    p.line = { x: x + 0.5, y: y + 0.38, tx: x, ty: y, st: 0, t: 0, bite: lure ? 1.5 + Math.random() * 3 : 3 + Math.random() * 6, lure, cast: Date.now() };
+    this.fx.push(['cast', p.line.x, p.line.y, p.id]);
+  }
+  catchFish(p, s) {
+    const ln = p.line, cave = ln.ty > this.surf[Math.max(0, Math.min(this.W - 1, ln.tx))] + 14;
+    const [id, n] = D.rollCatch(this.biome[Math.max(0, Math.min(this.W - 1, ln.tx))], cave, ln.lure, Math.random);
+    const left = addToInv(p.inv, id, n, 0); if (left > 0) this.spawnDrop(id, left, p.x, p.y);
+    p.invDirty = true; this.state.fished = (this.state.fished || 0) + 1; this.dirty = true;
+    this.fx.push(['catch', ln.x, ln.y, id]);
+    this.send(p, { t: 'toast', m: `Caught ${n > 1 ? n + '× ' : ''}${ITEMS[id].name}!` });
+    s[2]--; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); }
+  }
+  stepFishing(dt) {
+    for (const p of this.players.values()) {
+      const ln = p.line; if (!ln) continue;
+      const s = p.inv[p.sel], it = s && ITEMS[s[0]];
+      if (p.dead || p.sleep || !it || it.kind !== 'rod' || this.get(ln.tx, ln.ty) !== T.WATER || Math.hypot(ln.x - p.x, ln.y - p.y) > 15) { p.line = null; continue; }
+      ln.t += dt;
+      if (ln.st === 0 && ln.t >= ln.bite) { ln.st = 1; ln.t = 0; this.fx.push(['bite', ln.x, ln.y, p.id]); }
+      else if (ln.st === 1 && ln.t > 1.5) { p.line = null; this.send(p, { t: 'toast', m: 'It got away…' }); }
+    }
+  }
+
   snapshot() {
     const p = [], m = [], d = [];
     for (const q of this.players.values()) {
@@ -659,7 +789,8 @@ class World {
     }
     for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0]);
     for (const o of this.drops.values()) d.push([o.id, o.item, o.n, r2(o.x), r2(o.y)]);
-    return { t: 'snap', rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
+    const fl = []; for (const q of this.players.values()) if (q.line) fl.push([q.id, r2(q.line.x), r2(q.line.y), q.line.st]);
+    return { t: 'snap', fl, rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
   }
   flush() {
     if (this.pending.length) { this.broadcast({ t: 'tiles', c: this.pending }); this.pending = []; }

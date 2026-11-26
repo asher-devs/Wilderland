@@ -40,3 +40,9 @@ node test/browser.js     # headless Chrome, 3 browsers incl. mobile (needs puppe
 - Clay, gravel and moss generate in the world; plants drop fibre. Bag has 50 slots and a Sort button.
 - `node test/content.js` verifies every block is breakable, every item obtainable, every recipe craftable.
 - **Beds:** craft a Bed (6 planks + 6 fibre, Workbench). Right-click it by day to set your respawn point; at night right-click to sleep. When half the players (rounded up) are in bed the night is skipped, everyone wakes healed and monsters vanish. Being hit wakes you; move keys / "Get up" wake you manually.
+
+## v1.3 — Animals & fishing
+- 12 new creatures: cow, pig, sheep, chicken, deer, fox, bear (neutral — fights back only if hit), camel, penguin, turtle, songbirds and swimming fish. They spawn by biome, wander, and flee when hurt. Drops: leather, wool, feathers, raw fish.
+- Fishing: craft a Fishing Rod (3 planks + 4 fibre), right-click water to cast, click again the moment the bobber shows "!". Lures (2 feathers + fibre) make bites faster and rarer loot likelier. Catch fish, resources, and rarely a Golden Carp.
+- New gear: leather cap & tunic, wool blocks, fish tank; cooked fish heals a lot.
+- Tests: `node test/animals.js`, `node test/animals-ui.js` (needs a running server).

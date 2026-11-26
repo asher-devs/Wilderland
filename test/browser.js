@@ -5,7 +5,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); let fail = 0;
 const ok = (c, m) => { console.log(c ? '  ✔' : '  ✘ FAIL:', m); if (!c) fail++; };
 async function mk(browser, name, look, vp) {
   const ctx = await browser.createBrowserContext(), page = await ctx.newPage(); const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e))); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(String(e.stack || e))); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.setViewport(vp || { width: 1280, height: 720 });
   await page.evaluateOnNewDocument((n, l) => { if (!localStorage.getItem('wl_settings')) localStorage.setItem('wl_settings', JSON.stringify({ name: n, look: l })); }, name, look);
   await page.goto(URL); await sleep(500); return { page, errors, ctx };
