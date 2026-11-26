@@ -171,6 +171,7 @@ class World {
       case 'sleep': return this.onSleep(p, m);
       case 'door': return this.onDoor(p, m);
       case 'summon': return this.summonWarden(p);
+      case 'ping': return this.send(p, { t: 'pong', c: m.c });
       case 'fish': return this.onFish(p, m);
       case 'wake': return this.wake(p);
       case 'swap': return this.onSwap(p, m);
@@ -954,20 +955,31 @@ class World {
     }
   }
 
-  snapshot() {
-    const p = [], m = [], d = [];
+  /** Build one world snapshot, then cut it down per player: only what is within the view window is sent (saves a lot of bandwidth). */
+  snapshotAll() {
+    const p = [];
     for (const q of this.players.values()) {
       const s = q.inv[q.sel];
       p.push([q.id, r2(q.x), r2(q.y), r2(q.vx), r2(q.vy), q.f, q.dead ? 9 : q.a, s ? s[0] : 0, Math.ceil(q.hp), q.maxhp, q.eq.head ? q.eq.head[0] : 0, q.eq.body ? q.eq.body[0] : 0]);
     }
+    const m = [], d = [];
     for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0, o.fuse > 0 ? r2(o.fuse) : 0]);
     for (const o of this.drops.values()) d.push([o.id, o.item, o.n, r2(o.x), r2(o.y)]);
     const fl = []; for (const q of this.players.values()) if (q.line) fl.push([q.id, r2(q.line.x), r2(q.line.y), q.line.st]);
-    return { t: 'snap', fl, ar: this.arrows.map((a) => [r2(a.x), r2(a.y), r2(a.vx), r2(a.vy), a.k || 0]), bs: (() => { const b = this.findBoss(); return b ? { id: b.id, ph: b.ph, sh: b.sh, st: b.stun > 0 ? 1 : 0, f: b.fists.map((f) => [r2(f.x), r2(f.y), f.st]) } : null; })(), rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
+    const b = this.findBoss();
+    return { p, m, d, fl, ar: this.arrows.map((a) => [r2(a.x), r2(a.y), r2(a.vx), r2(a.vy), a.k || 0]),
+      bs: b ? { id: b.id, ph: b.ph, sh: b.sh, st: b.stun > 0 ? 1 : 0, f: b.fists.map((f) => [r2(f.x), r2(f.y), f.st]) } : null,
+      rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000 };
   }
+  snapshotFor(a, me) {
+    const VX = 58, VY = 40, cx = me.x, cy = me.y, near = (x, y) => Math.abs(x - cx) < VX && Math.abs(y - cy) < VY;
+    return { t: 'snap', fl: a.fl.filter((l) => near(l[1], l[2])), ar: a.ar.filter((r) => near(r[0], r[1])), bs: a.bs, rain: a.rain, tm: a.tm, p: a.p,
+      m: a.m.filter((o) => near(o[2], o[3]) || (a.bs && o[0] === a.bs.id)), d: a.d.filter((o) => near(o[3], o[4])), fx: this.fx.filter((f) => Math.abs(f[1] - cx) < VX + 30 && Math.abs(f[2] - cy) < VY + 30) };
+  }
+  snapshot() { const a = this.snapshotAll(); return this.snapshotFor(a, { x: this.spawn.x, y: this.spawn.y }); }
   flush() {
     if (this.pending.length) { this.broadcast({ t: 'tiles', c: this.pending }); this.pending = []; }
-    if (this.players.size) this.broadcast(this.snapshot());
+    if (this.players.size) { const a = this.snapshotAll(); for (const p of this.players.values()) this.send(p, this.snapshotFor(a, p)); }
     this.fx = [];
     for (const p of this.players.values()) {
       if (p.invDirty) { p.invDirty = false; this.send(p, { t: 'inv', inv: p.inv, eq: p.eq }); }

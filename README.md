@@ -63,3 +63,8 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 - **Summon:** craft a Warden Sigil (5 crystal, 4 iron bar, 3 gel, 3 raw fish) and use it near the surface. One boss at a time; HP 700 +300 per extra player. It leaves if everyone is gone for 15 s.
 - **Phase 1 (>66%)** stomps (ground shockwaves — jump them) and fires crystal shards; it tramples dirt/wood/glass but not stone. **Phase 2 (>33%)** fists detach and fly at you; it is shielded (35% damage) while both fists are home, so dodge, then hit it when a fist is out. **Phase 3** it floats, rains crystal spikes (roofs stop them), summons Boomers/spiders and every ~11 s crashes down stunned (150% damage).
 - **Loot:** Warden Core (→ Warden Blade, Warden Mail), crystal, iron and gold bars. Tests: `test/boss.js`, `test/boss-ui.js`.
+
+## v1.7 — Multiplayer smoothness
+- **Culled snapshots:** each player only receives mobs, drops, projectiles and effects within ~58×40 tiles of them (about 10× less data in a busy world). The boss bar data is always sent.
+- **Interpolation buffer:** remote players and mobs are rendered ~100 ms in the past between real snapshots (with a short extrapolation if a packet is late) instead of chasing the latest position.
+- **Ping/FPS readout** in the HUD (Settings → Show ping & FPS), **Performance mode** (renders at 1× resolution, fewer particles, blocky lighting) with an automatic hint when FPS stays low. Tests: `test/netperf.js`, `test/smooth.js`.

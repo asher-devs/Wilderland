@@ -1,6 +1,6 @@
 /* WILDERLAND client: networking, local prediction, rendering, lighting, input. UI lives in ui.js. */
 const Settings = {
-  d: { master: 0.8, sfx: 0.8, music: 0.5, look: null, zoom: 'auto', touch: 'auto', server: '', name: '', shake: true, light: 'smooth' },
+  d: { master: 0.8, sfx: 0.8, music: 0.5, look: null, zoom: 'auto', touch: 'auto', server: '', name: '', shake: true, light: 'smooth', perf: false, net: true },
   load() { try { Object.assign(this.d, JSON.parse(localStorage.getItem('wl_settings') || '{}')); } catch (e) { /* ignore */ } return this.d; },
   save() { try { localStorage.setItem('wl_settings', JSON.stringify(this.d)); } catch (e) { /* ignore */ } },
 };
@@ -177,24 +177,37 @@ const Game = (() => {
       case 'crafted': Sound.play('craft'); UI.crafted(m.item); return;
       case 'toolBreak': Sound.play('toolbreak'); UI.toast(`Your ${ITEMS[m.item].name} broke!`); return;
       case 'settings': S.settings = m.settings; UI.hostSettings(); return;
+      case 'pong': S.ping = Math.round(performance.now() - m.c); return;
       case 'prog': S.prog = m.prog; UI.updateProg(); return;
       case 'kicked': UI.error('You were removed from the world by the host'); leave(true); return;
       default:
     }
   }
+  // snapshot interpolation: render entities ~100 ms in the past between the two samples around that time (smooth despite jitter)
+  const INTERP = 100;
+  function pushSample(o, x, y, vx, vy, now) { const b = o.buf || (o.buf = []); const l = b[b.length - 1]; if (l && Math.abs(x - l.x) + Math.abs(y - l.y) > 8) b.length = 0; b.push({ t: now, x, y, vx: vx || 0, vy: vy || 0 }); if (b.length > 6) b.shift(); }
+  function sampleAt(o, rt) {
+    const b = o.buf; if (!b || !b.length) return;
+    while (b.length > 2 && b[1].t <= rt) b.shift();
+    if (b.length === 1 || rt <= b[0].t) { o.x = b[0].x; o.y = b[0].y; return; }
+    const a = b[0], c = b[1];
+    if (rt <= c.t) { const f = (rt - a.t) / (c.t - a.t || 1); o.x = a.x + (c.x - a.x) * f; o.y = a.y + (c.y - a.y) * f; }
+    else { const e = Math.min(0.12, (rt - c.t) / 1000); o.x = c.x + c.vx * e; o.y = c.y + c.vy * e; }
+  }
   function onSnap(m) {
+    const arrive = performance.now();
     S.time = m.tm; S.rain = m.rain || 0;
     const seen = new Set();
     for (const a of m.p) {
       const id = a[0]; if (id === S.id) continue; seen.add(id);
       let p = S.players.get(id);
       if (!p) { p = { id, x: a[1], y: a[2], t: Math.random() * 10, look: Gfx.playerLook(lookOf(id)), walkAmt: 0 }; S.players.set(id, p); }
-      p.tx = a[1]; p.ty = a[2]; p.vx = a[3]; p.vy = a[4]; p.f = a[5]; p.a = a[6]; p.held = a[7]; p.hp = a[8]; p.maxhp = a[9]; p.head = a[10]; p.body = a[11];
+      p.tx = a[1]; p.ty = a[2]; pushSample(p, a[1], a[2], a[3], a[4], arrive); p.vx = a[3]; p.vy = a[4]; p.f = a[5]; p.a = a[6]; p.held = a[7]; p.hp = a[8]; p.maxhp = a[9]; p.head = a[10]; p.body = a[11];
     }
     for (const id of S.players.keys()) if (!seen.has(id)) S.players.delete(id);
     S.lines = m.fl || []; S.arrows = m.ar || []; S.boss = m.bs || null;
     const seenM = new Set();
-    for (const a of m.m) { seenM.add(a[0]); let o = S.mobs.get(a[0]); if (!o) { o = { id: a[0], type: a[1], x: a[2], y: a[3], t: Math.random() * 9, w: MOBS[a[1]].w, h: MOBS[a[1]].h, px: a[2], py: a[3] }; S.mobs.set(a[0], o); } o.tx = a[2]; o.ty = a[3]; o.f = a[4]; o.hp = a[5]; o.maxhp = a[6]; o.hurt = a[7]; o.fuse = a[8] || 0; }
+    for (const a of m.m) { seenM.add(a[0]); let o = S.mobs.get(a[0]); if (!o) { o = { id: a[0], type: a[1], x: a[2], y: a[3], t: Math.random() * 9, w: MOBS[a[1]].w, h: MOBS[a[1]].h, px: a[2], py: a[3] }; S.mobs.set(a[0], o); } o.tx = a[2]; o.ty = a[3]; pushSample(o, a[2], a[3], 0, 0, arrive); o.f = a[4]; o.hp = a[5]; o.maxhp = a[6]; o.hurt = a[7]; o.fuse = a[8] || 0; }
     for (const id of S.mobs.keys()) if (!seenM.has(id)) S.mobs.delete(id);
     const seenD = new Set();
     for (const a of m.d) { seenD.add(a[0]); let o = S.drops.get(a[0]); if (!o) { o = { id: a[0], item: a[1], x: a[3], y: a[4], t: Math.random() * 6 }; S.drops.set(a[0], o); } o.n = a[2]; o.tx = a[3]; o.ty = a[4]; }
@@ -233,7 +246,7 @@ const Game = (() => {
       default:
     }
   }
-  function part(x, y, vx, vy, life, c, size, grav = 1) { if (S.particles.length > 500) return; S.particles.push({ x, y, vx, vy, life, max: life, c, size, grav }); }
+  function part(x, y, vx, vy, life, c, size, grav = 1) { if (S.particles.length > (Settings.d.perf ? 140 : 500)) return; S.particles.push({ x, y, vx, vy, life, max: life, c, size, grav }); }
   function burst(x, y, id, n, spd) { const c = Gfx.avg(id); for (let i = 0; i < n; i++) part(x + (Math.random() - 0.5) * 0.6, y + (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 6 * spd, -Math.random() * 5 * spd, 0.5 + Math.random() * 0.5, c.map((v) => v + (Math.random() - 0.5) * 30), 3 + Math.random() * 3); if (id === T.CRYSTAL) for (let i = 0; i < 8; i++) part(x, y, (Math.random() - 0.5) * 4, -Math.random() * 4, 1, [180, 240, 255], 3, -0.1); }
 
   // ---------------------------------------------------------------- input
@@ -356,9 +369,9 @@ const Game = (() => {
     }
   }
   function updateEntities(dt) {
-    const k = Math.min(1, dt * 14);
-    for (const p of S.players.values()) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.t += dt; p.walkAmt = Math.abs(p.vx) > 0.8 ? 1 : 0; p.swingT = ((p.swingT || 0) + dt * 4) % 1; }
-    for (const o of S.mobs.values()) { o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k; o.t += dt; o.air = Math.abs(o.y - o.py) > 0.02; o.py = o.y; }
+    const k = Math.min(1, dt * 14), rt = performance.now() - INTERP;
+    for (const p of S.players.values()) { sampleAt(p, rt); p.t += dt; p.walkAmt = Math.abs(p.vx) > 0.8 ? 1 : 0; p.swingT = ((p.swingT || 0) + dt * 4) % 1; }
+    for (const o of S.mobs.values()) { sampleAt(o, rt); o.t += dt; o.air = Math.abs(o.y - o.py) > 0.02; o.py = o.y; }
     for (const d of S.drops.values()) { d.x += (d.tx - d.x) * k; d.y += (d.ty - d.y) * k; d.t += dt; }
     for (let i = S.particles.length - 1; i >= 0; i--) { const p = S.particles[i]; p.life -= dt; if (p.life <= 0) { S.particles.splice(i, 1); continue; } p.vy += 14 * p.grav * dt; if (p.wob) { p.vx += Math.sin(S.clock * 5 + p.y * 3) * dt * 5; p.vy += Math.cos(S.clock * 4 + p.x * 3) * dt * 5; } p.x += p.vx * dt; p.y += p.vy * dt; }
     for (let i = S.texts.length - 1; i >= 0; i--) { const t = S.texts[i]; t.life -= dt; t.y -= dt * 1.2; if (t.life <= 0) S.texts.splice(i, 1); }
@@ -518,7 +531,7 @@ const Game = (() => {
     // lighting
     const tint = lightTint(S.time).map((c) => c * (1 - S.rain * 0.28)), pad = 8; const lx0 = x0 - pad, ly0 = y0 - pad, gw = x1 - x0 + 1 + pad * 2, gh = y1 - y0 + 1 + pad * 2;
     computeLight(lx0, ly0, gw, gh, tint, S.D);
-    g.save(); g.globalCompositeOperation = 'multiply'; g.imageSmoothingEnabled = Settings.d.light !== 'pixel'; g.imageSmoothingQuality = 'low';
+    g.save(); g.globalCompositeOperation = 'multiply'; g.imageSmoothingEnabled = Settings.d.light !== 'pixel' && !Settings.d.perf; g.imageSmoothingQuality = 'low';
     g.drawImage(lightCv, 0, 0, gw, gh, lx0 * TS + ox, ly0 * TS + oy, gw * TS, gh * TS); g.restore();
     // additive glows
     g.save(); g.globalCompositeOperation = 'lighter';
@@ -593,7 +606,7 @@ const Game = (() => {
   // ---------------------------------------------------------------- main loop
   let raf = 0, last = 0;
   function resize() {
-    S.dpr = Math.min(2, window.devicePixelRatio || 1); const w = window.innerWidth, h = window.innerHeight;
+    S.dpr = Settings.d.perf ? 1 : Math.min(2, window.devicePixelRatio || 1); const w = window.innerWidth, h = window.innerHeight;
     cv.width = Math.floor(w * S.dpr); cv.height = Math.floor(h * S.dpr); cv.style.width = w + 'px'; cv.style.height = h + 'px'; S.cw = cv.width; S.ch = cv.height;
     const z = Settings.d.zoom; let css = z === 'close' ? 48 : z === 'far' ? 24 : z === 'normal' ? 32 : (w >= 1500 ? 48 : w >= 700 ? 32 : 24);
     if (z === 'auto' && h < 460) css = Math.min(css, 24);
@@ -605,6 +618,9 @@ const Game = (() => {
     const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now;
     if (!S.running || !tiles) { if (!S.running) { cancelAnimationFrame(raf); raf = 0; } return; }
     S.clock += dt; S.dt = dt; S.D = daylight(S.time);
+    S.fps = (S.fps || 60) * 0.95 + (1 / Math.max(dt, 0.001)) * 0.05; S.netT = (S.netT || 0) - dt;
+    if (S.netT <= 0) { S.netT = 1; send({ t: 'ping', c: performance.now() }); const el = document.getElementById('info-net'); if (el) { el.style.display = Settings.d.net ? '' : 'none'; const pg = S.ping == null ? '…' : S.ping + 'ms'; el.textContent = Math.round(S.fps) + ' fps · ' + pg; el.style.color = S.ping > 200 || S.fps < 25 ? '#ff8a7a' : S.ping > 100 || S.fps < 45 ? '#ffd27a' : '#9be89b'; }
+      if (S.fps < 28 && !Settings.d.perf && !S.perfHint && S.clock > 8) { S.perfHint = true; UI.toast('Laggy? Settings → Performance mode can help'); } }
     updateMe(dt); updateEntities(dt); ambientFx(dt);
     const m = S.me, k = Math.min(1, dt * 7);
     const lookX = m.f * Math.min(2.2, Math.abs(m.vx) * 0.3), lookY = Math.max(-1, Math.min(3, m.vy * 0.08));

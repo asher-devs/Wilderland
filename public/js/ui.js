@@ -78,6 +78,8 @@ const UI = (() => {
     row('Touch controls', sel('touch', [['auto', 'Auto'], ['on', 'Always on'], ['off', 'Off']], applyTouch));
     row('Lighting', sel('light', [['smooth', 'Smooth'], ['pixel', 'Blocky (faster)']]));
     const sh = document.createElement('input'); sh.type = 'checkbox'; sh.checked = Settings.d.shake; sh.style.width = 'auto'; sh.onchange = () => { Settings.d.shake = sh.checked; Settings.save(); }; row('Screen shake', sh);
+    const pf = document.createElement('input'); pf.type = 'checkbox'; pf.checked = !!Settings.d.perf; pf.style.width = 'auto'; pf.onchange = () => { Settings.d.perf = pf.checked; Settings.save(); Game.resize(); }; row('Performance mode (phones)', pf);
+    const nt = document.createElement('input'); nt.type = 'checkbox'; nt.checked = Settings.d.net !== false; nt.style.width = 'auto'; nt.onchange = () => { Settings.d.net = nt.checked; Settings.save(); }; row('Show ping & FPS', nt);
     if (!inGame) { const sv = document.createElement('input'); sv.value = Settings.d.server; sv.placeholder = 'same host (default) or my-server.onrender.com'; sv.oninput = () => { Settings.d.server = sv.value.trim(); Settings.save(); }; row('Game server', sv); }
   }
   function applyTouch() { const on = Settings.d.touch === 'on' || (Settings.d.touch === 'auto' && (matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window)); document.body.classList.toggle('touch', on); }
