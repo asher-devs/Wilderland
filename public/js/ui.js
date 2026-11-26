@@ -246,7 +246,7 @@ const UI = (() => {
 
   // touch controls
   const hold = (id, fn) => { const b = $(id); const on = (e) => { e.preventDefault(); Sound.ensure(); fn(true); }, off = (e) => { e.preventDefault(); fn(false); }; b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off); };
-  hold('t-left', (v) => { S.input.left = v; }); hold('t-right', (v) => { S.input.right = v; }); hold('t-jump', (v) => { S.input.jump = v; });
+  hold('t-left', (v) => { S.input.left = v; }); hold('t-right', (v) => { S.input.right = v; }); hold('t-jump', (v) => { S.input.jump = v; }); hold('t-down', (v) => { S.input.down = v; });
   $('t-mode').addEventListener('pointerdown', (e) => { e.preventDefault(); S.touchMode = S.touchMode === 'mine' ? 'build' : 'mine'; $('t-mode').textContent = S.touchMode === 'mine' ? '⛏' : '▦'; $('t-mode').classList.toggle('build', S.touchMode === 'build'); });
   $('t-inv').addEventListener('pointerdown', (e) => { e.preventDefault(); toggleInventory(); }); $('t-chat').addEventListener('pointerdown', (e) => { e.preventDefault(); openChat(); }); $('t-menu').addEventListener('pointerdown', (e) => { e.preventDefault(); openPause(); });
   addEventListener('contextmenu', (e) => { if (!(e.target.tagName === 'INPUT')) e.preventDefault(); });

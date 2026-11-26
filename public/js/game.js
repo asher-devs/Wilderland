@@ -19,7 +19,7 @@ const Game = (() => {
   const S = {
     running: false, ws: null, code: '', id: 0, host: false, inv: [], eq: {}, sel: 0, hp: 100, maxhp: 100, def: 0, time: 0.1, nights: 0,
     players: new Map(), mobs: new Map(), drops: new Map(), plist: [], settings: {}, dead: false, leaving: false, wname: '',
-    me: null, cam: { x: 0, y: 0 }, TS: 32, cw: 0, ch: 0, dpr: 1, shake: 0, flash: 0, clock: 0, touchMode: 'mine', input: { left: false, right: false, jump: false },
+    me: null, cam: { x: 0, y: 0 }, TS: 32, cw: 0, ch: 0, dpr: 1, shake: 0, flash: 0, clock: 0, touchMode: 'mine', input: { left: false, right: false, jump: false, down: false },
     rain: 0, flashL: 0, falling: [], lightning: 0, act: { active: false, mode: null, px: 0, py: 0, edge: false, id: -1 }, mineProg: null, particles: [], texts: [], ambient: [], chest: null, prog: {},
   };
   const keys = new Set();
@@ -215,6 +215,7 @@ const Game = (() => {
       case 'tree': { Sound.play('treefall'); S.falling.push({ x, y, lg: v.lg || T.LOG, h: v.h, dir: v.dir, leaves: v.leaves, t: 0, thud: false }); break; }
       case 'shoot': Sound.play('swing'); break;
       case 'boom': Sound.play('mobdie'); Sound.play('smoke'); S.shake = Math.max(S.shake || 0, 0.5); for (let i = 0; i < 40; i++) { const an = Math.random() * 6.28, sp = 2 + Math.random() * 9; part(x, y, Math.cos(an) * sp, Math.sin(an) * sp, 0.5 + Math.random() * 0.6, i % 3 ? [255, 170 + Math.random() * 60, 40] : [70, 70, 70], 4 + Math.random() * 3, 0.3); } break;
+      case 'door': Sound.play('place', T.PLANKS); break;
       case 'cast': Sound.play('splash'); for (let i = 0; i < 6; i++) part(x, y, (Math.random() - 0.5) * 3, -Math.random() * 3, 0.5, [170, 215, 255], 2); break;
       case 'bite': Sound.play('splash'); S.texts.push({ x, y: y - 0.9, txt: '!', life: 0.9, max: 0.9, c: '#ff5a4a' }); for (let i = 0; i < 8; i++) part(x, y, (Math.random() - 0.5) * 4, -Math.random() * 4, 0.5, [190, 225, 255], 2); break;
       case 'catch': Sound.play('splash'); for (let i = 0; i < 12; i++) part(x, y, (Math.random() - 0.5) * 5, -Math.random() * 7, 0.7, [190, 225, 255], 3); break;
@@ -287,7 +288,14 @@ const Game = (() => {
     m.vx += (dir * run - m.vx) * Math.min(1, dt * (dir ? accel : (m.onGround ? 14 : 3)));
     if (m.onGround) m.coyote = 0.1; else m.coyote -= dt;
     if (wantJump) m.jumpBuf = 0.12; else m.jumpBuf -= dt;
-    if (m.inWater) { m.vy += C.GRAVITY * 0.25 * dt; m.vy = Math.min(m.vy, 4); if (wantJump) m.vy = Math.max(m.vy - 40 * dt, -5.5); }
+    const onLadder = !m.inWater && (get(cx, cy) === T.LADDER || get(cx, Math.floor(m.y + m.h * 0.2)) === T.LADDER || get(cx, cyFeet) === T.LADDER);
+    const down = !modal && (keys.has('s') || keys.has('arrowdown') || S.input.down);
+    if (onLadder && (wantJump || down || ((m.climbing || !m.onGround) && !dir))) {
+      // climb: up/jump goes up, down/S goes down, otherwise cling in place; steering sideways lets go
+      m.vy = wantJump ? -4.6 : down ? 5.2 : 0; m.vx *= 0.6; m.jumpBuf = 0; m.coyote = 0.1; m.climbing = true;
+    } else { m.climbing = false; }
+    if (m.climbing) { /* gravity suspended while on a ladder */ }
+    else if (m.inWater) { m.vy += C.GRAVITY * 0.25 * dt; m.vy = Math.min(m.vy, 4); if (wantJump) m.vy = Math.max(m.vy - 40 * dt, -5.5); }
     else {
       if (m.jumpBuf > 0 && m.coyote > 0) { m.vy = -C.JUMP; m.jumpBuf = 0; m.coyote = 0; Sound.play('jump'); }
       if (!wantJump && m.vy < -4.5) m.vy += C.GRAVITY * 1.6 * dt;
@@ -323,6 +331,7 @@ const Game = (() => {
       } else if (a.mode === 'place') {
         const id = get(tx, ty);
         if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
+        else if (a.edge && DEFS.DOORTILE[id] && inReach(tx, ty)) { send({ t: 'door', x: tx, y: ty }); }
         else if (a.edge && (id === T.BED || id === T.BED_R) && inReach(tx, ty)) { send({ t: 'sleep', x: tx, y: ty }); }
         else if (a.edge && (id === T.BENCH || id === T.FURNACE || id === T.MASON) && inReach(tx, ty)) { UI.openInventory(); }
         else if (it && it.kind === 'rod') { if (now > placeT) { placeT = now + 450; send({ t: 'fish', a: 'cast', x: tx, y: ty }); m.swing = 0; acting = true; } }
@@ -409,7 +418,7 @@ const Game = (() => {
       const y = y0 + j;
       for (let i = 0; i < gw; i++) {
         const x = x0 + i, idx = j * gw + i, v = get(x, y); const sol = DEFS.SOLID[v] === 1;
-        let r = amb * 0.9, gg = amb, b = amb * 1.4; ATT[idx] = DEFS.CLEAR[v] ? 0.94 : sol ? 0.74 : (DEFS.LEAF[v] ? 0.82 : 0.93);
+        let r = amb * 0.9, gg = amb, b = amb * 1.4; ATT[idx] = DEFS.CLEAR[v] ? 0.94 : sol ? 0.74 : DEFS.BACKWALL[v] ? 0.86 : (DEFS.LEAF[v] ? 0.82 : 0.93);
         if (x >= 0 && x < W) {
           if (y <= top[x]) { const k = sol ? 1 : 1; const lt = DEFS.LEAF[v] ? 0.78 : k; r = Math.max(r, tint[0] * lt); gg = Math.max(gg, tint[1] * lt); b = Math.max(b, tint[2] * lt); }
           const bl = BLOCKS[v] && BLOCKS[v].light;
@@ -467,6 +476,7 @@ const Game = (() => {
           continue;
         }
         g.drawImage(A, v * 16, vr * 16, 16, 16, sx, sy, TS, TS);
+        if (DEFS.BACKWALL[v]) { g.fillStyle = 'rgba(8,10,20,0.42)'; g.fillRect(sx, sy, TS, TS); }
         if (sol) {
           if (v !== T.GRASS && v !== T.SNOW && !DEFS.CLEAR[v] && !DEFS.SOLID[get(x, y - 1)]) { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(sx, sy, TS, u); }
           if (!DEFS.CLEAR[v] && !DEFS.SOLID[get(x, y + 1)]) { g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(sx, sy + TS - u, TS, u); }
@@ -598,7 +608,7 @@ const Game = (() => {
     UI.frame(dt);
   }
   // test/debug hooks
-  window.__G = { Backup, leave, S, get: (x, y) => get(x, y), world: () => ({ W, H, tiles, biome, surf }), send };
+  window.__G = { Backup, leave, S, get: (x, y) => get(x, y), world: () => ({ W, H, tiles, biome, surf, top }), send };
   function setLook(l) { Settings.d.look = l; Settings.save(); S._myLook = null; send({ t: 'look', look: l }); }
   return { Backup, S, setLook, create, join, leave, send, setSel, url, httpBase, resize, get, keys, nm, daylight };
 })();

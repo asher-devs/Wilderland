@@ -1,0 +1,51 @@
+// Ladders, doors and back walls. Run: node --no-warnings test/building.js
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const D = require('../public/js/defs.js'); const { T, ITEMS } = D;
+const { World } = require('../server/game.js'); const { openDb } = require('../server/db.js');
+let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  ✘ FAIL:', m); } };
+const db = openDb(fs.mkdtempSync(path.join(os.tmpdir(), 'wlb-'))); const world = World.create(db, { name: 'B', pid: 'h', size: 'medium', seed: 5 });
+world.settings.mobs = false;
+const fake = { open: true, sent: [], send(m) { this.sent.push(typeof m === 'string' ? JSON.parse(m) : m); }, close() {} };
+const p = world.addPlayer(fake, 'pa', 'T'); const sx = Math.floor(world.spawn.x); const gy = world.top[sx];
+for (let x = sx - 8; x <= sx + 8; x++) { for (let y = gy - 14; y < gy; y++) world.setTile(x, y, T.AIR); world.setTile(x, gy, T.GRASS); for (let y = gy + 1; y < gy + 4; y++) world.setTile(x, y, T.DIRT); world.top[x] = gy; }
+p.x = sx + 0.5; p.y = gy - p.h; const give = (id, n = 20) => { p.inv[0] = [id, n, 0]; p.sel = 0; };
+const place = (x, y) => world.handle(p, { t: 'place', x, y });
+console.log('# defs');
+for (const id of [T.LADDER, T.DOOR, T.WALL_PLANKS, T.WALL_STONE, T.WALL_BRICK, T.WALL_DARK]) ok(ITEMS[id] && ITEMS[id].block === id, `item for ${D.BLOCKS[id].name}`);
+ok(D.SOLID[T.DOOR] && D.SOLID[T.DOOR_T] && !D.SOLID[T.DOOR_BO] && !D.SOLID[T.DOOR_TO], 'closed doors solid, open doors passable');
+ok(!D.SOLID[T.LADDER] && !D.SOLID[T.WALL_STONE] && D.OPAQUE[T.WALL_STONE] && !D.OPAQUE[T.DOOR_BO], 'walls passable & light-blocking');
+console.log('# ladders');
+give(T.LADDER); p.y = gy - 12 - p.h; place(sx + 2, gy - 12); ok(world.get(sx + 2, gy - 12) === T.AIR, 'a ladder cannot float in open air'); p.y = gy - p.h;
+for (let y = gy - 1; y >= gy - 6; y--) place(sx + 2, y);
+ok(world.get(sx + 2, gy - 1) === T.LADDER, 'ladder placed on solid ground');
+let chain = 0; for (let y = gy - 1; y >= gy - 8; y--) if (world.get(sx + 2, y) === T.LADDER) chain++; ok(chain >= 4, 'ladders chain upward through open air (' + chain + ')');
+console.log('# back walls');
+give(T.WALL_STONE); place(sx - 3, gy - 1); ok(world.get(sx - 3, gy - 1) === T.WALL_STONE, 'back wall placed on air');
+give(T.WALL_BRICK); place(sx - 3, gy - 1); ok(world.get(sx - 3, gy - 1) === T.WALL_BRICK, 'a different wall replaces it');
+give(T.PLANKS); place(sx - 3, gy - 1); ok(world.get(sx - 3, gy - 1) === T.PLANKS, 'a normal block replaces a back wall');
+world.setTile(sx - 3, gy - 1, T.WALL_STONE); const sk = world.top[sx - 3];
+ok(world.top[sx - 3] === gy - 1, 'back wall counts as roof for sky light');
+give(T.TORCH); place(sx - 3, gy - 2); ok(world.get(sx - 3, gy - 2) === T.TORCH, 'torch can sit above a wall');
+console.log('# doors');
+give(T.DOOR, 3); place(sx + 5, gy - 1);
+ok(world.get(sx + 5, gy - 1) === T.DOOR && world.get(sx + 5, gy - 2) === T.DOOR_T, 'door places two tiles tall on the ground');
+ok(p.inv[0] && p.inv[0][1] === 2, 'one door item used');
+world.handle(p, { t: 'door', x: sx + 5, y: gy - 2 });
+ok(world.get(sx + 5, gy - 1) === T.DOOR_BO && world.get(sx + 5, gy - 2) === T.DOOR_TO, 'clicking the top half opens both halves');
+world.handle(p, { t: 'door', x: sx + 5, y: gy - 1 });
+ok(world.get(sx + 5, gy - 1) === T.DOOR && world.get(sx + 5, gy - 2) === T.DOOR_T, 'clicking again closes it');
+world.handle(p, { t: 'door', x: sx + 5, y: gy - 1 }); p.x = sx + 5.5; p.y = gy - p.h;
+world.handle(p, { t: 'door', x: sx + 5, y: gy - 1 }); ok(world.get(sx + 5, gy - 1) === T.DOOR_BO, 'door reopened');
+world.handle(p, { t: 'door', x: sx + 5, y: gy - 1 }); ok(world.get(sx + 5, gy - 1) === T.DOOR_BO, 'cannot close a door on yourself');
+p.x = sx + 0.5;
+// breaking either half removes both and drops one door
+world.drops && world.drops.clear && world.drops.clear();
+world.setTile(sx + 6, gy - 1, T.DOOR); world.setTile(sx + 6, gy - 2, T.DOOR_T);
+const before = world.drops ? world.drops.size : 0; world.breakTile(p, sx + 6, gy - 2, null);
+ok(world.get(sx + 6, gy - 1) === T.AIR && world.get(sx + 6, gy - 2) === T.AIR, 'breaking the top half removes the whole door');
+ok(!world.drops || world.drops.size === before + 1, 'exactly one door dropped');
+// door far away is out of reach
+p.x = sx - 7; world.handle(p, { t: 'door', x: sx + 5, y: gy - 1 }); ok(world.get(sx + 5, gy - 1) === T.DOOR_BO, 'cannot toggle a door out of reach');
+console.log('# recipes');
+for (const id of [T.LADDER, T.DOOR, T.WALL_PLANKS, T.WALL_STONE, T.WALL_BRICK, T.WALL_DARK]) ok(D.RECIPES.some((r) => r.out === id), `recipe for ${D.BLOCKS[id].name}`);
+console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

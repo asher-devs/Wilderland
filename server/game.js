@@ -169,6 +169,7 @@ class World {
       case 'sel': p.sel = Math.max(0, Math.min(C.HOTBAR - 1, m.i | 0)); return;
       case 'sort': return this.onSort(p);
       case 'sleep': return this.onSleep(p, m);
+      case 'door': return this.onDoor(p, m);
       case 'fish': return this.onFish(p, m);
       case 'wake': return this.wake(p);
       case 'swap': return this.onSwap(p, m);
@@ -235,6 +236,11 @@ class World {
       delete this.chests[key];
       for (const q of this.players.values()) if (q.chest === key) { q.chest = null; this.send(q, { t: 'chestClosed' }); }
     }
+    if (D.DOORTILE[id]) { // two halves: remove the other one too and drop a single door
+      const top = id === T.DOOR_T || id === T.DOOR_TO, oy = top ? y + 1 : y - 1, ov = this.get(x, oy);
+      if (D.DOORTILE[ov] && (ov === T.DOOR_T || ov === T.DOOR_TO) !== top) this.setTile(x, oy, T.AIR);
+      this.spawnDrop(T.DOOR, 1, x + 0.5, y + 0.5);
+    }
     if (id === T.BED || id === T.BED_R) { // beds are two tiles: remove the other half too, drop one bed
       const ox = id === T.BED ? x + 1 : x - 1; if (this.get(ox, y) === (id === T.BED ? T.BED_R : T.BED)) this.setTile(ox, y, T.AIR);
       if (id === T.BED_R) this.spawnDrop(T.BED, 1, x + 0.5, y + 0.5);
@@ -281,7 +287,7 @@ class World {
       s[2]--; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); } p.invDirty = true; return;
     }
     if (!it || !it.block) return;
-    if (!(cur === T.AIR || cur === T.WATER || D.DECOR[cur] && cur !== T.ROCK || D.LEAF[cur])) return;
+    if (D.BACKWALL[it.block] ? !(cur === T.AIR || (D.BACKWALL[cur] && cur !== it.block)) : !(cur === T.AIR || cur === T.WATER || D.BACKWALL[cur] || D.DECOR[cur] && cur !== T.ROCK || D.LEAF[cur])) return;
     if (!this.reach(p, x, y)) return;
     const sup = (a, b2) => { const v = this.get(a, b2); return v !== T.AIR && v !== T.WATER && !D.DECOR[v]; };
     if (!(sup(x - 1, y) || sup(x + 1, y) || sup(x, y - 1) || sup(x, y + 1) || y > this.surf[x] + 1)) return;
@@ -290,6 +296,14 @@ class World {
       const free = (a) => this.get(a, y) === T.AIR && D.SOLID[this.get(a, y + 1)] === 1 && a > 0 && a < this.W - 1;
       let lx = -1; if (free(x) && free(x + 1)) lx = x; else if (free(x) && free(x - 1)) lx = x - 1; if (lx < 0) return;
       this.setTile(lx, y, T.BED); this.setTile(lx + 1, y, T.BED_R); this.fx.push(['place', lx + 1, y + 0.5, T.BED]);
+      if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true; return;
+    }
+    if (blk === T.DOOR) { // two tiles tall: bottom half rests on solid ground
+      const freeT = (yy) => { const v = this.get(x, yy); return v === T.AIR || D.BACKWALL[v]; };
+      let by = -1; if (freeT(y) && freeT(y - 1) && D.SOLID[this.get(x, y + 1)] === 1) by = y; else if (freeT(y) && freeT(y + 1) && D.SOLID[this.get(x, y + 2)] === 1) by = y + 1;
+      if (by < 0) return;
+      for (const q of this.players.values()) if (!q.dead && x + 1 > q.x - q.w / 2 && x < q.x + q.w / 2 && by + 1 > q.y && by - 1 < q.y + q.h) return;
+      this.setTile(x, by - 1, T.DOOR_T); this.setTile(x, by, T.DOOR); this.fx.push(['place', x + 0.5, by, T.DOOR]);
       if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true; return;
     }
     const sh = D.SHAPE[blk];
@@ -387,6 +401,15 @@ class World {
     const i = m.i | 0; const s = p.inv[i]; if (!s) return;
     const n = m.all ? s[1] : 1; const d = this.spawnDrop(s[0], n, p.x, p.y + 0.5, s[2], p.f * 4, -3); if (d) d.delay = 1.2;
     s[1] -= n; if (s[1] <= 0) p.inv[i] = null; p.invDirty = true;
+  }
+  onDoor(p, m) {
+    if (p.dead || p.sleep) return;
+    const x = m.x | 0, y = m.y | 0, id = this.get(x, y); if (!D.DOORTILE[id] || !this.reach(p, x, y)) return;
+    const top = id === T.DOOR_T || id === T.DOOR_TO, by = top ? y + 1 : y, ty = by - 1, bid = this.get(x, by), tid = this.get(x, ty);
+    if (!((bid === T.DOOR && tid === T.DOOR_T) || (bid === T.DOOR_BO && tid === T.DOOR_TO))) return;
+    if (bid === T.DOOR) { this.setTile(x, by, T.DOOR_BO); this.setTile(x, ty, T.DOOR_TO); this.fx.push(['door', x + 0.5, by, 1]); return; }
+    for (const q of this.players.values()) if (!q.dead && x + 1 > q.x - q.w / 2 && x < q.x + q.w / 2 && by + 1 > q.y && ty < q.y + q.h) { this.send(p, { t: 'toast', m: 'Something is in the doorway' }); return; }
+    this.setTile(x, by, T.DOOR); this.setTile(x, ty, T.DOOR_T); this.fx.push(['door', x + 0.5, by, 0]);
   }
   onUse(p) {
     if (p.dead || Date.now() < p.useCd) return;

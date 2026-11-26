@@ -18,7 +18,9 @@
     SANDSTONE_BRICK: 71, SMOOTH_SANDSTONE: 72, CHISELED_SANDSTONE: 73, SNOW_BRICK: 74, ICE_BRICK: 75,
     PINE_LOG: 76, MAPLE_LOG: 77, WILLOW_LOG: 78, STRIPPED_OAK: 79, STRIPPED_PINE: 80, STRIPPED_MAPLE: 81, STRIPPED_WILLOW: 82,
     PINE_PLANKS: 83, MAPLE_PLANKS: 84, WILLOW_PLANKS: 85, PARQUET: 86, BOOKSHELF: 87, BEAM: 88, HAY: 89,
-    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96, WOOL_BLOCK: 97, FISH_TANK: 98,
+    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96, WOOL_BLOCK: 97, FISH_TANK: 98, LADDER: 99,
+    // 248+ are the last free tile ids (shapes occupy 200-247)
+    DOOR: 248, DOOR_T: 249, DOOR_BO: 250, DOOR_TO: 251, WALL_PLANKS: 252, WALL_STONE: 253, WALL_BRICK: 254, WALL_DARK: 255,
   };
   const I = {
     WOOD_PICK: 100, WOOD_AXE: 101, WOOD_SWORD: 102,
@@ -141,6 +143,10 @@
     [T.BED_R, 'Bed', 0.6, 0, 'wood', -1, false],
     [T.WOOL_BLOCK, 'Wool Block', 0.6, 0, 'soft', T.WOOL_BLOCK, true],
     [T.FISH_TANK, 'Fish Tank', 1.0, 0, 'glass', T.FISH_TANK, true],
+    [T.LADDER, 'Ladder', 0.3, 0, 'wood', T.LADDER, false],
+    [T.DOOR, 'Door', 1.0, 0, 'wood', -1, true], [T.DOOR_T, 'Door', 1.0, 0, 'wood', -1, true], [T.DOOR_BO, 'Open Door', 1.0, 0, 'wood', -1, false], [T.DOOR_TO, 'Open Door', 1.0, 0, 'wood', -1, false],
+    [T.WALL_PLANKS, 'Plank Back Wall', 0.4, 0, 'soft', T.WALL_PLANKS, false], [T.WALL_STONE, 'Stone Back Wall', 0.4, 0, 'soft', T.WALL_STONE, false],
+    [T.WALL_BRICK, 'Brick Back Wall', 0.4, 0, 'soft', T.WALL_BRICK, false], [T.WALL_DARK, 'Dark Back Wall', 0.4, 0, 'soft', T.WALL_DARK, false],
   ];
 
   // ---- shaped variants (slab / stairs / wall). Each gets its own tile id (200+) and a collision shape.
@@ -168,6 +174,7 @@
     SHAPE[w] = { base, kind: 'wall', item: w, box: 5 }; SHAPE_OF[base + ':wall'] = w;
     BLOCK_ROWS.push([w, lab + ' Wall', b[2] * 0.8, b[3], b[4], w, false]);
   }
+  if (nid > 248) throw new Error('tile ids 200-247 exhausted: shapes collide with doors/walls');
   const BLOCKS = [];
   for (const r of BLOCK_ROWS) BLOCKS[r[0]] = { id: r[0], name: r[1], hard: r[2], tier: r[3], mat: r[4], drop: r[5], solid: r[6], light: r[7] || null, tool: (r[4] === 'stone' || r[4] === 'ore' || r[4] === 'metal') ? 'pick' : null, dropP: 1 };
   BLOCKS[T.PLANT].dropP = 0.45; BLOCKS[T.BUSH].dropP = 1; BLOCKS[T.REED].dropP = 0.8;
@@ -178,12 +185,15 @@
   for (let i = 0; i < 256; i++) COLL[i] = SOLID[i] ? 1 : 0;
   for (const k in SHAPE) COLL[k] = SHAPE[k].box;
   const CLEAR = new Uint8Array(256); for (const k of [T.GLASS, T.FRAMED_GLASS, T.STAINED_GLASS, T.TINTED_GLASS, T.IRON_GRATE, T.CRYSTAL_LAMP, T.FISH_TANK]) CLEAR[k] = 1;
-  const OPAQUE = new Uint8Array(256); for (let i = 0; i < 256; i++) OPAQUE[i] = SOLID[i] && !CLEAR[i] ? 1 : 0;
+  // background wall panels: not solid, drawn dim behind everything, block sky light; any block placed on one replaces it
+  const BACKWALL = new Uint8Array(256); for (const k of [T.WALL_PLANKS, T.WALL_STONE, T.WALL_BRICK, T.WALL_DARK]) BACKWALL[k] = 1;
+  const DOORTILE = new Uint8Array(256); for (const k of [T.DOOR, T.DOOR_T, T.DOOR_BO, T.DOOR_TO]) DOORTILE[k] = 1;
+  const OPAQUE = new Uint8Array(256); for (let i = 0; i < 256; i++) OPAQUE[i] = (SOLID[i] && !CLEAR[i]) || BACKWALL[i] ? 1 : 0;
   const LOGS = new Uint8Array(256); for (const k of [T.LOG, T.PINE_LOG, T.MAPLE_LOG, T.WILLOW_LOG]) LOGS[k] = 1; // natural trunks
   const STRIPPED = { [T.LOG]: T.STRIPPED_OAK, [T.PINE_LOG]: T.STRIPPED_PINE, [T.MAPLE_LOG]: T.STRIPPED_MAPLE, [T.WILLOW_LOG]: T.STRIPPED_WILLOW };
   const NEWBLOCKS = []; for (let i = 36; i <= T.BED; i++) NEWBLOCKS.push(i); NEWBLOCKS.push(T.WOOL_BLOCK, T.FISH_TANK);
   const PLACEABLE = new Set([T.GRASS, T.DIRT, T.STONE, T.LOG, T.SAND, T.SNOW, T.COPPER, T.IRON, T.GOLD, T.CRYSTAL,
-    T.SANDSTONE, T.ICE, T.CACTUS, T.PLANKS, T.BENCH, T.FURNACE, T.CHEST, T.TORCH, T.MUD, T.SLATE, ...NEWBLOCKS]);
+    T.SANDSTONE, T.ICE, T.CACTUS, T.PLANKS, T.BENCH, T.FURNACE, T.CHEST, T.TORCH, T.MUD, T.SLATE, ...NEWBLOCKS, T.LADDER, T.DOOR, T.WALL_PLANKS, T.WALL_STONE, T.WALL_BRICK, T.WALL_DARK]);
   for (const k in SHAPE) if (SHAPE[k].item === +k) PLACEABLE.add(+k);
   const LEAF = new Uint8Array(256); for (const k of [T.LEAVES, T.PINE, T.WILLOW, T.MAPLE]) LEAF[k] = 1;
   const DECOR = new Uint8Array(256); for (const k of [T.PLANT, T.BUSH, T.ROCK, T.MUSHROOM, T.REED]) DECOR[k] = 1;
@@ -338,6 +348,10 @@
     R(T.IRON_GRATE, 3, [[I.IRON_BAR, 2]], 'bench', 'metal'),
     R(T.CRYSTAL_BLOCK, 1, [[T.CRYSTAL, 4]], 'bench', 'metal'),
     R(T.CRYSTAL_LAMP, 2, [[T.CRYSTAL, 2], [T.GLASS, 2]], 'bench', 'decor'),
+    R(T.LADDER, 4, [[T.PLANKS, 2], [I.FIBER, 1]], 'hand', 'misc'),
+    R(T.DOOR, 1, [[T.PLANKS, 6]], 'bench', 'decor'),
+    R(T.WALL_PLANKS, 4, [[T.PLANKS, 1]], 'hand', 'decor'), R(T.WALL_STONE, 4, [[T.STONE, 1]], 'hand', 'decor'),
+    R(T.WALL_BRICK, 4, [[T.BRICK, 1]], 'hand', 'decor'), R(T.WALL_DARK, 4, [[T.SLATE, 1]], 'hand', 'decor'),
     R(T.LANTERN, 2, [[I.IRON_BAR, 1], [T.TORCH, 2], [T.GLASS, 1]], 'bench', 'decor'),
   ];
   // slab / stairs / wall recipes for every shaped material
@@ -479,5 +493,5 @@
   function toolWear(id) { const b = BLOCKS[id]; return b && b.hard >= 6 ? 2 : 1; }
   /** message when `it` can't mine `id` */
   function needText(id) { const b = BLOCKS[id]; return `${b ? b.name : 'This block'} needs a ${TIER_NAMES[Math.min(5, b ? b.tier : 1)]} Pickaxe or better`; }
-  return { FISH_LOOT, rollCatch, LEAF, DECOR, COLL, BOXES, SHAPE, SHAPE_OF, SHAPED, WALLED, CLEAR, OPAQUE, LOGS, STRIPPED, CATS, TIER_NAMES, canMine, toolWear, needText, BIOMES, T, I, BLOCKS, ITEMS, RECIPES, MOBS, C, SOLID, PLACEABLE, isSolidTile, moveBody, maxHpFor, defenseFor, mineTime, empty };
+  return { FISH_LOOT, rollCatch, LEAF, DECOR, BACKWALL, DOORTILE, COLL, BOXES, SHAPE, SHAPE_OF, SHAPED, WALLED, CLEAR, OPAQUE, LOGS, STRIPPED, CATS, TIER_NAMES, canMine, toolWear, needText, BIOMES, T, I, BLOCKS, ITEMS, RECIPES, MOBS, C, SOLID, PLACEABLE, isSolidTile, moveBody, maxHpFor, defenseFor, mineTime, empty };
 });

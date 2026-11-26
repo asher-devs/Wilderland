@@ -52,3 +52,9 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 
 ## v1.4 — New hostiles
 - **Skeleton** (arrows from range, needs line of sight; keeps its distance), **Boomer** (creeps up, swells and blows up — hurts you and clears dirt/wood/glass, never ore or stone), **Cave Spider** (fast biter). Spawn at night on grass/forest and in caves. Test: `node test/hostiles.js`.
+
+## v1.5 — Building
+- **Ladders** (2 planks + fibre → 4): climb with W/Space/▲, descend with S/▼, cling when idle, steer sideways to let go. Chain upward through open air.
+- **Doors** (6 planks, bench): two tiles tall, right-click to open/close, can't be closed on a player. Breaking either half drops one door.
+- **Back wall panels** (plank/stone/brick/dark, 4 per craft): passable decorative walls that block sky light and mob spawns inside; any block placed on one replaces it. Limitation: single tile layer, so a torch placed on a wall replaces the wall.
+- Tile ids 248–255 are now used; defs.js throws if generated shapes ever grow into them. Tests: `test/building.js`, `test/building-ui.js`.
