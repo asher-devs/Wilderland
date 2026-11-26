@@ -53,7 +53,7 @@ class World {
     this.chests = rec.chests && Object.keys(rec.chests).length ? rec.chests : (gen.chests || {});
     this.saved = saved || {}; // pid -> persisted player data
     this.players = new Map(); this.mobs = new Map(); this.drops = new Map();
-    this.weather = { rain: 0, t: 60 + Math.random() * 120, target: 0 }; this.nextId = 1; this.fx = []; this.pending = []; this.dirty = !rec.tiles; this.tick = 0; this.spawnT = 0;
+    this.weather = { rain: 0, t: 60 + Math.random() * 120, target: 0 }; this.nextId = 1; this.arrows = []; this.fx = []; this.pending = []; this.dirty = !rec.tiles; this.tick = 0; this.spawnT = 0;
     this.emptySince = Date.now(); this.lastSave = Date.now();
     // top solid per column (for sky exposure)
     this.top = new Int16Array(this.W);
@@ -517,6 +517,7 @@ class World {
         }
       }
     }
+    this.stepArrows(dt);
     // contact damage
     for (const mob of this.mobs.values()) {
       if (!mob.dmg || (MOBS[mob.type].neutral && !(mob.angry > 0))) continue;
@@ -524,6 +525,36 @@ class World {
         if (p.dead || p.invul > 0) continue;
         if (Math.abs(mob.x - p.x) < (mob.w + p.w) / 2 && mob.y < p.y + p.h && mob.y + mob.h > p.y) this.hurtPlayer(p, mob.dmg, mob.x < p.x ? 1 : -1, mob.name);
       }
+    }
+  }
+  clearLine(x0, y0, x1, y1) {
+    const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2);
+    for (let i = 1; i < n; i++) { const t = i / n; if (this.solid(Math.floor(x0 + (x1 - x0) * t), Math.floor(y0 + (y1 - y0) * t))) return false; }
+    return true;
+  }
+  /** a blast: hurts players and mobs in range and clears soft blocks (never ore, stone or metal) */
+  explode(x, y, r, dmg, src) {
+    this.fx.push(['boom', x, y, r]);
+    for (let yy = Math.floor(y - r); yy <= Math.ceil(y + r); yy++) for (let xx = Math.floor(x - r); xx <= Math.ceil(x + r); xx++) {
+      if (Math.hypot(xx + 0.5 - x, yy + 0.5 - y) > r - 0.3 || xx < 2 || xx >= this.W - 2 || yy < 2 || yy >= this.H - 3) continue;
+      const id = this.get(xx, yy), b = D.BLOCKS[id]; if (!b || id === T.AIR || id === T.WATER || id === T.BED || id === T.BED_R || id === T.CHEST) continue;
+      if (b.mat === 'soft' || b.mat === 'wood' || b.mat === 'glass') this.setTile(xx, yy, T.AIR);
+    }
+    for (const p of this.players.values()) {
+      if (p.dead) continue; const d = Math.hypot(p.x - x, p.y + 0.8 - y); if (d > r + 1 || p.invul > 0) continue;
+      this.hurtPlayer(p, Math.round(dmg * (1 - d / (r + 1.5))) + 4, p.x < x ? -1 : 1, src ? src.name : 'Explosion');
+    }
+    for (const m of this.mobs.values()) { if (m === src || MOBS[m.type].animal) continue; const d = Math.hypot(m.x - x, m.y - y); if (d < r) { m.hp -= Math.round(dmg * 0.5 * (1 - d / r)); if (m.hp <= 0) this.mobs.delete(m.id); } }
+  }
+  stepArrows(dt) {
+    for (let i = this.arrows.length - 1; i >= 0; i--) {
+      const a = this.arrows[i]; a.life -= dt; a.vy += 14 * dt; a.x += a.vx * dt; a.y += a.vy * dt;
+      let dead = a.life <= 0 || this.solid(Math.floor(a.x), Math.floor(a.y));
+      if (!dead) for (const p of this.players.values()) {
+        if (p.dead || p.invul > 0) continue;
+        if (Math.abs(a.x - p.x) < p.w / 2 + 0.15 && a.y > p.y && a.y < p.y + p.h) { this.hurtPlayer(p, a.dmg, a.vx > 0 ? 1 : -1, 'Skeleton'); dead = true; break; }
+      }
+      if (dead) this.arrows.splice(i, 1);
     }
   }
   hurtPlayer(p, dmg, dir, by) {
@@ -577,14 +608,15 @@ class World {
     if (this.settings.difficulty === 'peaceful') return null;
     if (!underground) {
       switch (b) {
-        case 0: return night ? (r < 0.65 ? 'zombie' : 'slime') : (r < 0.7 ? 'rabbit' : 'slime');
-        case 3: return night ? (r < 0.7 ? 'zombie' : 'slime') : (r < 0.85 ? 'rabbit' : 'slime');
+        case 0: return night ? (r < 0.4 ? 'zombie' : r < 0.6 ? 'skeleton' : r < 0.8 ? 'boomer' : 'slime') : (r < 0.7 ? 'rabbit' : 'slime');
+        case 3: return night ? (r < 0.45 ? 'zombie' : r < 0.65 ? 'skeleton' : r < 0.8 ? 'boomer' : 'slime') : (r < 0.85 ? 'rabbit' : 'slime');
         case 5: return night ? (r < 0.4 ? 'zombie' : 'frog') : (r < 0.7 ? 'frog' : 'slime');
         case 4: return night ? (r < 0.6 ? 'wolf' : 'zombie') : (r < 0.25 ? 'wolf' : 'rabbit');
         case 1: return night ? 'scorpion' : (r < 0.35 ? 'scorpion' : 'rabbit');
         default: return night ? (r < 0.7 ? 'frostling' : 'wolf') : (r < 0.35 ? 'frostling' : 'rabbit');
       }
     }
+    if (r < 0.14) return 'spider'; if (r > 0.9) return d > 40 ? 'skeleton' : 'boomer';
     if (d < 100) return (b === 2 || b === 4) && r < 0.4 ? 'frostling' : r < 0.45 ? 'bat' : r < 0.75 ? (b === 5 ? 'frog' : 'slime') : b === 1 ? 'scorpion' : 'zombie';
     return r < 0.4 ? 'crawler' : r < 0.7 ? 'bat' : b === 2 ? 'frostling' : 'zombie';
   }
@@ -659,6 +691,23 @@ class World {
           }
         }
         if (!dir) mob.vx *= 0.6;
+      } else if (mob.type === 'skeleton') { // keeps its distance and fires arrows
+        if (target) { const dx = target.x - cx, ad = Math.abs(dx); dir = ad < 5 ? (dx < 0 ? 1 : -1) : ad > 11 ? (dx < 0 ? -1 : 1) : 0; mob.f = dx < 0 ? -1 : 1; }
+        else { if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 2 + Math.random() * 3; mob.dir = Math.random() < 0.35 ? 0 : (Math.random() < 0.5 ? -1 : 1); } dir = mob.dir * 0.4; }
+        mob.vx += (dir * def.speed - mob.vx) * Math.min(1, dt * 8);
+        if (mob.hitX && mob.onGround && dir) mob.vy = -10.5;
+        mob.shoot = (mob.shoot || 0) - dt;
+        if (target && mob.shoot <= 0 && Math.abs(target.x - cx) < 15 && Math.abs(target.y + 0.8 - cy) < 7 && this.clearLine(cx, mob.y + 0.5, target.x, target.y + 0.8)) {
+          mob.shoot = 2 + Math.random() * 0.8; const tx = target.x - cx, ty = target.y + 0.8 - (mob.y + 0.5), tt = Math.max(0.35, Math.hypot(tx, ty) / 16);
+          this.arrows.push({ x: cx + mob.f * 0.4, y: mob.y + 0.5, vx: tx / tt, vy: ty / tt - 0.5 * 14 * tt, life: 3, dmg: mob.dmg + 8 }); this.fx.push(['shoot', cx, mob.y + 0.5, 0]);
+        }
+      } else if (mob.type === 'boomer') { // creeps up, swells, then goes off
+        if (target) dir = Math.abs(target.x - cx) < 0.3 ? 0 : target.x < cx ? -1 : 1; else { if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 2 + Math.random() * 3; mob.dir = Math.random() < 0.4 ? 0 : (Math.random() < 0.5 ? -1 : 1); } dir = mob.dir * 0.4; }
+        const close = nd < 2.6;
+        if (close) { mob.fuse = (mob.fuse || 0) + dt; dir *= 0.25; mob.arm = 1; } else { mob.fuse = Math.max(0, (mob.fuse || 0) - dt * 0.7); mob.arm = 0; }
+        mob.vx += (dir * def.speed - mob.vx) * Math.min(1, dt * 8);
+        if (mob.hitX && mob.onGround && dir) mob.vy = -10.5;
+        if (mob.fuse > 1.5) { this.explode(mob.x, mob.y + mob.h / 2, 3.2, 38, mob); this.mobs.delete(mob.id); return; }
       } else if (mob.type === 'slime' || mob.type === 'frog') {
         if (target) dir = target.x < cx ? -1 : 1; else { if (mob.t > (mob.nextT || 0)) { mob.nextT = mob.t + 1.5 + Math.random() * 2; mob.dir = Math.random() < 0.3 ? 0 : (Math.random() < 0.5 ? -1 : 1); } dir = mob.dir; }
         if (mob.onGround) {
@@ -787,10 +836,10 @@ class World {
       const s = q.inv[q.sel];
       p.push([q.id, r2(q.x), r2(q.y), r2(q.vx), r2(q.vy), q.f, q.dead ? 9 : q.a, s ? s[0] : 0, Math.ceil(q.hp), q.maxhp, q.eq.head ? q.eq.head[0] : 0, q.eq.body ? q.eq.body[0] : 0]);
     }
-    for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0]);
+    for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0, o.fuse > 0 ? r2(o.fuse) : 0]);
     for (const o of this.drops.values()) d.push([o.id, o.item, o.n, r2(o.x), r2(o.y)]);
     const fl = []; for (const q of this.players.values()) if (q.line) fl.push([q.id, r2(q.line.x), r2(q.line.y), q.line.st]);
-    return { t: 'snap', fl, rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
+    return { t: 'snap', fl, ar: this.arrows.map((a) => [r2(a.x), r2(a.y), r2(a.vx), r2(a.vy)]), rain: Math.round(this.weather.rain * 100) / 100, tm: Math.round(this.state.time * 10000) / 10000, p, m, d, fx: this.fx };
   }
   flush() {
     if (this.pending.length) { this.broadcast({ t: 'tiles', c: this.pending }); this.pending = []; }

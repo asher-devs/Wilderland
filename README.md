@@ -49,3 +49,6 @@ node test/browser.js     # headless Chrome, 3 browsers incl. mobile (needs puppe
 
 ## World backups
 Free hosting wipes the database on every deploy, so each player's device keeps an automatic copy of every world they play (IndexedDB, refreshed every 3 minutes and on leaving). If the server forgets a world, joining its room code — or an in-progress reconnect — restores it automatically. Worlds list: ⬇ downloads a backup file, "Restore from file" loads one. API: `GET /api/export/CODE?pid=` (members only), `POST /api/import`. Test: `node test/backup.js`.
+
+## v1.4 — New hostiles
+- **Skeleton** (arrows from range, needs line of sight; keeps its distance), **Boomer** (creeps up, swells and blows up — hurts you and clears dirt/wood/glass, never ore or stone), **Cave Spider** (fast biter). Spawn at night on grass/forest and in caves. Test: `node test/hostiles.js`.

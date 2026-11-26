@@ -363,6 +363,9 @@
     frog: { name: 'Bog Frog', hp: 11, dmg: 6, speed: 2.8, w: 0.6, h: 0.5, drops: [[I.GEL, 0.5, 1, 1], [I.RAW_MEAT, 0.4, 1, 1]] },
     wolf: { name: 'Grey Wolf', hp: 34, dmg: 16, speed: 4.6, w: 1.2, h: 0.85, drops: [[I.RAW_MEAT, 0.85, 1, 2]] },
     crawler: { name: 'Crystal Crawler', hp: 70, dmg: 24, speed: 4.4, w: 1.1, h: 0.8, glow: [0.8, 0.5, 1], drops: [[T.CRYSTAL, 0.6, 1, 3], [I.IRON_BAR, 0.4, 1, 3], [I.GOLD_BAR, 0.25, 1, 2], [I.COOKED_MEAT, 0.3, 1, 2]] },
+    skeleton: { name: 'Skeleton', hp: 22, dmg: 6, speed: 2.2, w: 0.6, h: 1.7, ranged: true, drops: [[I.COPPER_BAR, 0.3, 1, 2], [I.IRON_BAR, 0.12, 1, 1], [I.FEATHER, 0.5, 1, 2], [I.FIBER, 0.4, 1, 2]] },
+    boomer: { name: 'Boomer', hp: 18, dmg: 0, speed: 2.6, w: 0.7, h: 1.2, boom: true, drops: [[I.GEL, 0.6, 1, 2], [T.CRYSTAL, 0.12, 1, 1], [I.IRON_BAR, 0.1, 1, 1]] },
+    spider: { name: 'Cave Spider', hp: 20, dmg: 11, speed: 4.2, w: 1.1, h: 0.6, drops: [[I.FIBER, 0.7, 1, 3], [I.RAW_MEAT, 0.3, 1, 1], [I.GEL, 0.3, 1, 1]] },
       // ---- animals (peaceful; they live in the world even on Peaceful difficulty)
     cow: { name: 'Cow', hp: 14, dmg: 0, speed: 1.7, w: 1.5, h: 1.2, passive: true, animal: true, drops: [[I.RAW_MEAT, 1, 1, 3], [I.LEATHER, 0.8, 1, 2]] },
     pig: { name: 'Pig', hp: 10, dmg: 0, speed: 1.9, w: 1.1, h: 0.8, passive: true, animal: true, drops: [[I.RAW_MEAT, 1, 1, 2]] },
