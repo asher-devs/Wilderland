@@ -7,7 +7,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wla-')); const db = openDb(di
 const world = World.create(db, { name: 'A', pid: 'h', size: 'medium', seed: 777 });
 const fake = { open: true, sent: [], send(m) { this.sent.push(typeof m === 'string' ? JSON.parse(m) : m); }, close() {} };
 const p = world.addPlayer(fake, 'pa', 'Angler'); const sx = Math.floor(world.spawn.x);
-const DIFFN = { hp: 1, dmg: 1, spawn: 1 };
+const DIFFN = { hp: 1, dmg: 1, spawn: 1 }; world.settings.mobs = false; // no random hostiles interfering
 console.log('# animal definitions');
 const animals = Object.keys(MOBS).filter((k) => MOBS[k].animal);
 ok(animals.length >= 12, `at least 12 animal types (${animals.length})`);
