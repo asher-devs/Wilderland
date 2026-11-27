@@ -70,6 +70,11 @@ const Game = (() => {
       };
     });
   }
+  function downedNear() { if (!S.me || S.dead) return null; let best = null, bd = 3.8; for (const p of S.players.values()) { if (p.a !== 9) continue; const d = Math.hypot(p.x - S.me.x, p.y - S.me.y); if (d < bd) { bd = d; best = p; } } return best; }
+  function reviveNear() { const d = downedNear(); if (d) send({ t: 'revive', id: d.id }); }
+  { const rv = document.getElementById('t-revive'), mk = document.getElementById('t-mark');
+    if (rv) rv.addEventListener('pointerdown', (e) => { e.preventDefault(); reviveNear(); });
+    if (mk) mk.addEventListener('pointerdown', (e) => { e.preventDefault(); if (S.me && !S.dead) send({ t: 'mark', x: S.me.x, y: S.me.y }); }); }
   function send(o) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(o)); }
   // ---------- world backups (kept on this device; the free server host wipes saves on every deploy)
   const Backup = (() => {
@@ -274,6 +279,7 @@ const Game = (() => {
     if (k >= '0' && k <= '9') { setSel(k === '0' ? 9 : +k - 1); }
     else if (k === 'e' || k === 'i') UI.toggleInventory();
     else if (k === 'q') UI.toggleQuests();
+    else if (k === 'f') reviveNear();
     else if (k === 'g') { const a = aimWorld(); send({ t: 'mark', x: a.x, y: a.y }); }
     else if (k === 'escape') UI.escape();
     else if (k === 't' || k === 'enter') { e.preventDefault(); UI.openChat(); }
@@ -642,6 +648,7 @@ const Game = (() => {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now;
     if (!S.running || !tiles) { if (!S.running) { cancelAnimationFrame(raf); raf = 0; } return; }
+    { const rv = document.getElementById('t-revive'); if (rv) { const sh = downedNear() ? '' : 'none'; if (rv.style.display !== sh) rv.style.display = sh; } }
     S.clock += dt; S.dt = dt; S.D = daylight(S.time);
     S.fps = (S.fps || 60) * 0.95 + (1 / Math.max(dt, 0.001)) * 0.05; S.netT = (S.netT || 0) - dt;
     if (S.netT <= 0) { S.netT = 1; send({ t: 'ping', c: performance.now() }); const el = document.getElementById('info-net'); if (el) { el.style.display = Settings.d.net ? '' : 'none'; const pg = S.ping == null ? '…' : S.ping + 'ms'; el.textContent = Math.round(S.fps) + ' fps · ' + pg; el.style.color = S.ping > 200 || S.fps < 25 ? '#ff8a7a' : S.ping > 100 || S.fps < 45 ? '#ffd27a' : '#9be89b'; }

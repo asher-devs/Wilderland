@@ -189,6 +189,9 @@ class World {
       case 'till': return this.onTill(p, m);
       case 'plant': return this.onPlant(p, m);
       case 'interact': return this.onInteract(p, m);
+      case 'revive': { if (p.dead || p.sleep) return; const q = [...this.players.values()].find((o) => o.id === (m.id | 0)); if (!q || q === p || !q.dead || q.deadT <= 0 || Math.hypot(q.x - p.x, q.y - p.y) > 4) return;
+        q.dead = false; q.hp = Math.ceil(q.maxhp * 0.5); q.invul = 2.5; q.vx = q.vy = 0; q.a = 0; q.statDirty = true; q.regen = 0; q.lastMv = Date.now();
+        this.send(q, { t: 'respawn', x: q.x, y: q.y }); this.fx.push(['heal', q.x, q.y, q.id]); this.sys(`💖 ${p.name} revived ${q.name}!`); return; }
       case 'mark': { const now = Date.now(); if (now - (p.markT || 0) < 1500 || p.dead) return; p.markT = now; const x = +m.x, y = +m.y; if (!Number.isFinite(x) || !Number.isFinite(y)) return; this.broadcast({ t: 'mark', x: r2(Math.max(0, Math.min(this.W, x))), y: r2(Math.max(0, Math.min(this.H, y))), n: p.name, id: p.id }); return; }
       case 'ping': return this.send(p, { t: 'pong', c: m.c });
       case 'fish': return this.onFish(p, m);
@@ -819,7 +822,7 @@ class World {
     this.send(p, { t: 'kb', vx: dir * 7, vy: -7 });
     this.fx.push(['hurt', p.x, p.y + 0.8, p.id]);
     if (p.hp <= 0) {
-      p.hp = 0; p.dead = true; p.deadT = 3.5; p.mine = null; p.sleep = null; p.line = null; p.chest = null;
+      p.hp = 0; p.dead = true; p.deadT = [...this.players.values()].some((q) => q !== p && !q.dead) ? 7 : 3.5; p.mine = null; p.sleep = null; p.line = null; p.chest = null;
       this.fx.push(['die', p.x, p.y + 0.8, p.id]);
       this.sys(`${p.name} was slain by a ${by || 'monster'}`);
       this.send(p, { t: 'dead', by: by || 'monster' });
