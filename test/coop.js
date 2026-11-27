@@ -12,6 +12,12 @@ const sx = Math.floor(world.spawn.x), gy = world.top[sx]; b.x = sx - 15; a.x = s
 a.inv[0] = [T.FENCE, 4, 0]; a.sel = 0; world.handle(a, { t: 'place', x: sx + 2, y: gy - 1 }); ok(world.get(sx + 2, gy - 1) === T.FENCE, 'fence places');
 world.handle(a, { t: 'mark', x: 10.5, y: 20.5 }); ok(B.sent.some((m) => m.t === 'mark' && m.n === 'Ann' && m.x === 10.5), 'marker reaches teammates');
 const n = B.sent.length; world.handle(a, { t: 'mark', x: 11, y: 20 }); ok(B.sent.length === n, 'marker rate limited');
+// signs
+world.setTile(sx - 1, gy - 1, T.AIR); a.inv[1] = [T.SIGN, 2, 0]; a.sel = 1; world.handle(a, { t: 'place', x: sx - 1, y: gy - 1 }); ok(world.get(sx - 1, gy - 1) === T.SIGN, 'sign places on ground');
+world.handle(a, { t: 'sign', x: sx - 1, y: gy - 1, text: 'Hello <b>base</b>' }); ok(world.state.signs[(sx - 1) + ',' + (gy - 1)] === 'Hello bbase/b', 'sign text saved and sanitised');
+ok(B.sent.some((m) => m.t === 'sign' && m.text), 'sign text broadcast');
+world.handle(a, { t: 'sign', x: sx + 9, y: gy - 1, text: 'x' }); ok(!world.state.signs[(sx + 9) + ',' + (gy - 1)], 'cannot write on non-sign');
+world.handle(a, { t: 'sign', x: sx - 1, y: gy - 1, text: 'y'.repeat(300) }); ok(world.state.signs[(sx - 1) + ',' + (gy - 1)].length === 80, 'text capped at 80');
 // revive
 b.x = a.x + 1; b.y = a.y; world.hurtPlayer ? 0 : 0; b.hp = 1; world.damagePlayer ? world.damagePlayer(b, 999, 'test') : null;
 if (!b.dead) { b.dead = true; b.hp = 0; b.deadT = 7; }

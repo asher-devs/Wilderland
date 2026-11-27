@@ -161,7 +161,7 @@ class World {
     for (let x = 0; x < W; x++) raw.writeUInt16LE(this.surf[x], W * H + W + x * 2);
     this.send(p, {
       t: 'welcome', id: p.id, code: this.code, wname: this.name, W, H, host: p.pid === this.host, settings: this.settings,
-      spawn: this.spawn, time: this.state.time, x: p.x, y: p.y, hp: p.hp, maxhp: p.maxhp, def: D.defenseFor(p.eq, p.buffs), q: p.q, buffs: this.buffList(p),
+      spawn: this.spawn, signs: this.state.signs || {}, time: this.state.time, x: p.x, y: p.y, hp: p.hp, maxhp: p.maxhp, def: D.defenseFor(p.eq, p.buffs), q: p.q, buffs: this.buffList(p),
       inv: p.inv, eq: p.eq, players: this.plist(), prog: this.prog(), returning: p.returning,
     });
     p.ws.send(zlib.deflateSync(raw, { level: 4 }));
@@ -189,6 +189,7 @@ class World {
       case 'till': return this.onTill(p, m);
       case 'plant': return this.onPlant(p, m);
       case 'interact': return this.onInteract(p, m);
+      case 'sign': { const x = m.x | 0, y = m.y | 0; if (this.get(x, y) !== T.SIGN || !this.reach(p, x, y)) return; const text = String(m.text || '').replace(/[\u0000-\u001f<>]/g, '').slice(0, 80); const sg = this.state.signs || (this.state.signs = {}); if (text) sg[x + ',' + y] = text; else delete sg[x + ',' + y]; this.dirty = true; this.broadcast({ t: 'sign', x, y, text }); return; }
       case 'revive': { if (p.dead || p.sleep) return; const q = [...this.players.values()].find((o) => o.id === (m.id | 0)); if (!q || q === p || !q.dead || q.deadT <= 0 || Math.hypot(q.x - p.x, q.y - p.y) > 4) return;
         q.dead = false; q.hp = Math.ceil(q.maxhp * 0.5); q.invul = 2.5; q.vx = q.vy = 0; q.a = 0; q.statDirty = true; q.regen = 0; q.lastMv = Date.now();
         this.send(q, { t: 'respawn', x: q.x, y: q.y }); this.fx.push(['heal', q.x, q.y, q.id]); this.sys(`💖 ${p.name} revived ${q.name}!`); return; }
@@ -319,6 +320,7 @@ class World {
     const sup = (a, b2) => { const v = this.get(a, b2); return v !== T.AIR && v !== T.WATER && !D.DECOR[v]; };
     if (!(sup(x - 1, y) || sup(x + 1, y) || sup(x, y - 1) || sup(x, y + 1) || y > this.surf[x] + 1)) return;
     let blk = it.block;
+    if (blk === T.SIGN) { if (D.SOLID[this.get(x, y + 1)] !== 1) return; if (this.state.signs) delete this.state.signs[x + ',' + y]; }
     if (blk === T.BED) { // two tiles wide, needs solid ground under both halves
       const free = (a) => this.get(a, y) === T.AIR && D.SOLID[this.get(a, y + 1)] === 1 && a > 0 && a < this.W - 1;
       let lx = -1; if (free(x) && free(x + 1)) lx = x; else if (free(x) && free(x - 1)) lx = x - 1; if (lx < 0) return;

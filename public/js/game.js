@@ -131,7 +131,7 @@ const Game = (() => {
     applyWelcome(w, false); return w;
   }
   function applyWelcome(w, isReconnect) {
-    S.id = w.id; S.code = w.code; S.wname = w.wname; S.host = w.host; S.settings = w.settings; S.time = w.time; S.inv = w.inv; S.eq = w.eq; S.hp = w.hp; S.maxhp = w.maxhp; S.def = w.def; S.q = w.q || { prog: {}, done: {} }; S.buffs = {}; for (const k in (w.buffs || {})) S.buffs[k] = Date.now() + w.buffs[k] * 1000; S.prog = w.prog || {};
+    S.id = w.id; S.code = w.code; S.wname = w.wname; S.host = w.host; S.settings = w.settings; S.time = w.time; S.inv = w.inv; S.eq = w.eq; S.hp = w.hp; S.maxhp = w.maxhp; S.signs = w.signs || {}; S.def = w.def; S.q = w.q || { prog: {}, done: {} }; S.buffs = {}; for (const k in (w.buffs || {})) S.buffs[k] = Date.now() + w.buffs[k] * 1000; S.prog = w.prog || {};
     S.players.clear(); S.mobs.clear(); S.drops.clear(); S.plist = w.players; S.dead = false; S.chest = null;
     if (!S.me || !isReconnect) {
       S.me = { x: w.x, y: w.y, vx: 0, vy: 0, w: C.PW, h: C.PH, f: 1, onGround: false, step: true, swing: -1, swingT: 0, sendT: 0, coyote: 0, jumpBuf: 0, hurt: 0, anim: 0, walkT: 0, inWater: false, stepT: 0, lastSend: '', fall: 0 };
@@ -164,6 +164,7 @@ const Game = (() => {
       case 'snap': return onSnap(m);
       case 'tiles': for (const [x, y, v] of m.c) { tiles[y * W + x] = v; if (DEFS.OPAQUE[v]) { if (y < top[x]) top[x] = y; } else if (y === top[x]) rescanTop(x); } return;
       case 'inv': S.inv = m.inv; S.eq = m.eq; UI.updateInv(); return;
+      case 'sign': S.signs = S.signs || {}; if (m.text) S.signs[m.x + ',' + m.y] = m.text; else delete S.signs[m.x + ',' + m.y]; return;
       case 'mark': S.marks = (S.marks || []).filter((o) => o.id !== m.id); S.marks.push({ x: m.x, y: m.y, n: m.n, id: m.id, t: Date.now() + 25000 }); UI.sys && 0; Sound.play('chat'); return;
       case 'q': S.q = m.q; UI.updateQuests(); return;
       case 'questDone': { const q = DEFS.QUESTS.find((x) => x.id === m.id); if (q) UI.toast('📜 Quest complete: ' + q.name + '! Reward: ' + q.reward.map((r) => r[1] + '× ' + DEFS.ITEMS[r[0]].name).join(', ')); Sound.play('craft'); return; }
@@ -372,6 +373,7 @@ const Game = (() => {
         else if (it && it.kind === 'hoe' && inReach(tx, ty)) { if (now > placeT) { placeT = now + 220; send({ t: 'till', x: tx, y: ty }); acting = true; } }
         else if (a.edge && it && it.plant && inReach(tx, ty) && (id === T.FARMLAND || (id === T.AIR && get(tx, ty + 1) === T.FARMLAND))) { send({ t: 'plant', x: tx, y: ty }); }
         else if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
+        else if (a.edge && id === T.SIGN && inReach(tx, ty)) { const cur = (S.signs && S.signs[tx + ',' + ty]) || ''; const txt = window.prompt('Sign text (max 80 characters, empty to clear):', cur); if (txt !== null) send({ t: 'sign', x: tx, y: ty, text: txt }); acting = true; }
         else if (a.edge && DEFS.DOORTILE[id] && inReach(tx, ty)) { send({ t: 'door', x: tx, y: ty }); }
         else if (a.edge && (id === T.BED || id === T.BED_R) && inReach(tx, ty)) { send({ t: 'sleep', x: tx, y: ty }); }
         else if (a.edge && (id === T.BENCH || id === T.FURNACE || id === T.MASON) && inReach(tx, ty)) { UI.openInventory(); }
@@ -529,6 +531,9 @@ const Game = (() => {
     // drops
     for (const d of S.drops.values()) { const sx = d.x * TS + ox, sy = (d.y) * TS + oy + Math.sin(d.t * 3) * TS * 0.06 - TS * 0.2; const sz = TS * 0.5; g.drawImage(Gfx.icon(d.item), sx - sz / 2, sy - sz / 2, sz, sz); if (d.n > 1) { g.fillStyle = '#fff'; g.font = `${Math.round(TS * 0.3)}px monospace`; g.fillText(d.n, sx + sz / 3, sy + sz / 1.5); } }
     // mobs
+    if (S.signs && S.me) { g.save(); g.font = 'bold 12px sans-serif'; g.textAlign = 'center';
+      for (const k in S.signs) { const [sx2, sy2] = k.split(',').map(Number); if (Math.hypot(sx2 + 0.5 - S.me.x, sy2 - S.me.y) > 6 || get(sx2, sy2) !== T.SIGN) continue;
+        const txt = S.signs[k], w = Math.min(260, g.measureText(txt).width + 14), bx = (sx2 + 0.5) * TS + ox, by = sy2 * TS + oy - 10; g.fillStyle = 'rgba(40,26,12,0.88)'; g.fillRect(bx - w / 2, by - 20, w, 20); g.strokeStyle = '#c89a5a'; g.strokeRect(bx - w / 2, by - 20, w, 20); g.fillStyle = '#ffe9c4'; g.fillText(txt.length > 34 ? txt.slice(0, 33) + '…' : txt, bx, by - 6); } g.restore(); }
     if (S.marks) { const nowT = Date.now(); S.marks = S.marks.filter((o) => o.t > nowT); for (const o of S.marks) {
       let mx = o.x * TS + ox, my = o.y * TS + oy; const pulse = 1 + Math.sin(nowT / 160) * 0.15, off = mx < 20 || mx > cw - 20 || my < 40 || my > ch - 60;
       mx = Math.max(24, Math.min(cw - 24, mx)); my = Math.max(44, Math.min(ch - 64, my));

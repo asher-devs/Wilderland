@@ -18,7 +18,7 @@
     SANDSTONE_BRICK: 71, SMOOTH_SANDSTONE: 72, CHISELED_SANDSTONE: 73, SNOW_BRICK: 74, ICE_BRICK: 75,
     PINE_LOG: 76, MAPLE_LOG: 77, WILLOW_LOG: 78, STRIPPED_OAK: 79, STRIPPED_PINE: 80, STRIPPED_MAPLE: 81, STRIPPED_WILLOW: 82,
     PINE_PLANKS: 83, MAPLE_PLANKS: 84, WILLOW_PLANKS: 85, PARQUET: 86, BOOKSHELF: 87, BEAM: 88, HAY: 89,
-    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96, WOOL_BLOCK: 97, FISH_TANK: 98, LADDER: 99, FENCE: 157,
+    CHECKER: 90, MARBLE: 91, BASALT: 92, MASON: 93, LANTERN: 94, BED: 95, BED_R: 96, WOOL_BLOCK: 97, FISH_TANK: 98, LADDER: 99, FENCE: 157, SIGN: 158,
     // 248+ are the last free tile ids (shapes occupy 200-247)
     // farming (tile ids 150-156; items 164-168 so tile and item ids never clash)
     FARMLAND: 150, WHEAT1: 151, WHEAT2: 152, WHEAT3: 153, CARROT1: 154, CARROT2: 155, CARROT3: 156,
@@ -152,6 +152,7 @@
     [T.WHEAT1, 'Wheat Sprout', 0.05, 0, 'soft', -1, false], [T.WHEAT2, 'Young Wheat', 0.05, 0, 'soft', -1, false], [T.WHEAT3, 'Ripe Wheat', 0.05, 0, 'soft', -1, false],
     [T.CARROT1, 'Carrot Sprout', 0.05, 0, 'soft', -1, false], [T.CARROT2, 'Young Carrots', 0.05, 0, 'soft', -1, false], [T.CARROT3, 'Ripe Carrots', 0.05, 0, 'soft', -1, false],
     [T.LADDER, 'Ladder', 0.3, 0, 'wood', T.LADDER, false],
+    [T.SIGN, 'Sign', 0.3, 0, 'wood', T.SIGN, false],
     [T.FENCE, 'Wooden Fence', 0.5, 0, 'wood', T.FENCE, true],
     [T.DOOR, 'Door', 1.0, 0, 'wood', -1, true], [T.DOOR_T, 'Door', 1.0, 0, 'wood', -1, true], [T.DOOR_BO, 'Open Door', 1.0, 0, 'wood', -1, false], [T.DOOR_TO, 'Open Door', 1.0, 0, 'wood', -1, false],
     [T.WALL_PLANKS, 'Plank Back Wall', 0.4, 0, 'soft', T.WALL_PLANKS, false], [T.WALL_STONE, 'Stone Back Wall', 0.4, 0, 'soft', T.WALL_STONE, false],
@@ -208,10 +209,10 @@
   const STRIPPED = { [T.LOG]: T.STRIPPED_OAK, [T.PINE_LOG]: T.STRIPPED_PINE, [T.MAPLE_LOG]: T.STRIPPED_MAPLE, [T.WILLOW_LOG]: T.STRIPPED_WILLOW };
   const NEWBLOCKS = []; for (let i = 36; i <= T.BED; i++) NEWBLOCKS.push(i); NEWBLOCKS.push(T.WOOL_BLOCK, T.FISH_TANK);
   const PLACEABLE = new Set([T.GRASS, T.DIRT, T.STONE, T.LOG, T.SAND, T.SNOW, T.COPPER, T.IRON, T.GOLD, T.CRYSTAL,
-    T.SANDSTONE, T.ICE, T.CACTUS, T.PLANKS, T.BENCH, T.FURNACE, T.CHEST, T.TORCH, T.MUD, T.SLATE, ...NEWBLOCKS, T.LADDER, T.FENCE, T.DOOR, T.WALL_PLANKS, T.WALL_STONE, T.WALL_BRICK, T.WALL_DARK]);
+    T.SANDSTONE, T.ICE, T.CACTUS, T.PLANKS, T.BENCH, T.FURNACE, T.CHEST, T.TORCH, T.MUD, T.SLATE, ...NEWBLOCKS, T.LADDER, T.FENCE, T.SIGN, T.DOOR, T.WALL_PLANKS, T.WALL_STONE, T.WALL_BRICK, T.WALL_DARK]);
   for (const k in SHAPE) if (SHAPE[k].item === +k) PLACEABLE.add(+k);
   const LEAF = new Uint8Array(256); for (const k of [T.LEAVES, T.PINE, T.WILLOW, T.MAPLE]) LEAF[k] = 1;
-  const DECOR = new Uint8Array(256); for (const k of [T.PLANT, T.BUSH, T.ROCK, T.MUSHROOM, T.REED, T.WHEAT1, T.WHEAT2, T.WHEAT3, T.CARROT1, T.CARROT2, T.CARROT3]) DECOR[k] = 1;
+  const DECOR = new Uint8Array(256); for (const k of [T.PLANT, T.BUSH, T.ROCK, T.MUSHROOM, T.REED, T.WHEAT1, T.WHEAT2, T.WHEAT3, T.CARROT1, T.CARROT2, T.CARROT3, T.SIGN]) DECOR[k] = 1;
   const BIOMES = ['Forest', 'Desert', 'Snow', 'Plains', 'Mountain', 'Swamp'];
 
   const ITEMS = {};
@@ -392,6 +393,7 @@
     R(I.WARDEN_MAIL, 1, [[I.WARDEN_CORE, 3], [I.IRON_BAR, 8]], 'bench', 'tools'),
     R(I.HOE, 1, [[T.PLANKS, 2], [I.FIBER, 2]], 'bench', 'tools'),
     R(I.BREAD, 1, [[I.WHEAT, 3]], 'bench', 'misc'),
+    R(T.SIGN, 2, [[T.PLANKS, 3]], 'hand', 'decor'),
     R(T.FENCE, 4, [[T.PLANKS, 2], [I.FIBER, 1]], 'hand', 'decor'),
     R(T.LADDER, 4, [[T.PLANKS, 2], [I.FIBER, 1]], 'hand', 'misc'),
     R(T.DOOR, 1, [[T.PLANKS, 6]], 'bench', 'decor'),

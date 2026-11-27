@@ -86,3 +86,4 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 - **Map markers:** press G (aim at a spot) to drop a beacon visible to everyone for 25 s, with your name and an edge arrow when it is off-screen. Tests: `test/coop.js`.
 - **Revive:** when a teammate is alive, a downed player waits 7 s instead of 3.5 s; stand within ~4 tiles and press F (💖 button on touch) to revive them in place at 50% HP with brief invulnerability. 
 - Touch gets a 📍 marker button (drops a beacon at your position).
+- **Signs** (3 planks → 2): place on the ground, right-click to write up to 80 characters (everyone in the room sees it when within 6 tiles; saved with the world). Tests in `test/coop.js`.
