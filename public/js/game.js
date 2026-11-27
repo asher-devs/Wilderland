@@ -159,6 +159,7 @@ const Game = (() => {
       case 'snap': return onSnap(m);
       case 'tiles': for (const [x, y, v] of m.c) { tiles[y * W + x] = v; if (DEFS.OPAQUE[v]) { if (y < top[x]) top[x] = y; } else if (y === top[x]) rescanTop(x); } return;
       case 'inv': S.inv = m.inv; S.eq = m.eq; UI.updateInv(); return;
+      case 'mark': S.marks = (S.marks || []).filter((o) => o.id !== m.id); S.marks.push({ x: m.x, y: m.y, n: m.n, id: m.id, t: Date.now() + 25000 }); UI.sys && 0; Sound.play('chat'); return;
       case 'q': S.q = m.q; UI.updateQuests(); return;
       case 'questDone': { const q = DEFS.QUESTS.find((x) => x.id === m.id); if (q) UI.toast('📜 Quest complete: ' + q.name + '! Reward: ' + q.reward.map((r) => r[1] + '× ' + DEFS.ITEMS[r[0]].name).join(', ')); Sound.play('craft'); return; }
       case 'buffs': S.buffs = {}; for (const k in m.b) S.buffs[k] = Date.now() + m.b[k] * 1000; UI.updateBuffs(); return;
@@ -273,6 +274,7 @@ const Game = (() => {
     if (k >= '0' && k <= '9') { setSel(k === '0' ? 9 : +k - 1); }
     else if (k === 'e' || k === 'i') UI.toggleInventory();
     else if (k === 'q') UI.toggleQuests();
+    else if (k === 'g') { const a = aimWorld(); send({ t: 'mark', x: a.x, y: a.y }); }
     else if (k === 'escape') UI.escape();
     else if (k === 't' || k === 'enter') { e.preventDefault(); UI.openChat(); }
     else if (k === 'q') { if (S.inv[S.sel]) send({ t: 'drop', i: S.sel, all: e.shiftKey }); }
@@ -521,6 +523,11 @@ const Game = (() => {
     // drops
     for (const d of S.drops.values()) { const sx = d.x * TS + ox, sy = (d.y) * TS + oy + Math.sin(d.t * 3) * TS * 0.06 - TS * 0.2; const sz = TS * 0.5; g.drawImage(Gfx.icon(d.item), sx - sz / 2, sy - sz / 2, sz, sz); if (d.n > 1) { g.fillStyle = '#fff'; g.font = `${Math.round(TS * 0.3)}px monospace`; g.fillText(d.n, sx + sz / 3, sy + sz / 1.5); } }
     // mobs
+    if (S.marks) { const nowT = Date.now(); S.marks = S.marks.filter((o) => o.t > nowT); for (const o of S.marks) {
+      let mx = o.x * TS + ox, my = o.y * TS + oy; const pulse = 1 + Math.sin(nowT / 160) * 0.15, off = mx < 20 || mx > cw - 20 || my < 40 || my > ch - 60;
+      mx = Math.max(24, Math.min(cw - 24, mx)); my = Math.max(44, Math.min(ch - 64, my));
+      g.save(); g.fillStyle = '#ffd45c'; g.strokeStyle = '#1a1200'; g.lineWidth = 2; g.beginPath(); g.moveTo(mx, my); g.lineTo(mx - 9 * pulse, my - 18 * pulse); g.lineTo(mx + 9 * pulse, my - 18 * pulse); g.closePath(); g.fill(); g.stroke();
+      g.font = 'bold 12px sans-serif'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeText(o.n + (off ? ' ↗' : ''), mx, my - 24); g.fillStyle = '#fff'; g.fillText(o.n + (off ? ' ↗' : ''), mx, my - 24); g.restore(); } }
     for (const o of S.mobs.values()) if (o.fl & 8) { g.fillStyle = '#ff6b9a'; g.font = Math.round(TS * 0.7) + 'px sans-serif'; g.textAlign = 'center'; g.fillText('♥', o.x * TS + ox, (o.y - 0.4 + Math.sin(S.clock * 4) * 0.1) * TS + oy); }
     for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16 * (o.fl & 1 ? 0.55 : 1), { tamed: o.fl & 2, sit: o.fl & 4, f: o.f, t: o.t, hurt: o.hurt, air: o.air, id: o.id, moving: Math.abs(o.tx - o.x) > 0.004 || Math.abs(o.ty - o.y) > 0.004, angry: MOBS[o.type].neutral && o.hurt, fuse: o.fuse, ph: S.boss && S.boss.id === o.id ? S.boss.ph : 0, sh: S.boss && S.boss.id === o.id && S.boss.sh, st: S.boss && S.boss.id === o.id && S.boss.st });
     // other players

@@ -189,6 +189,7 @@ class World {
       case 'till': return this.onTill(p, m);
       case 'plant': return this.onPlant(p, m);
       case 'interact': return this.onInteract(p, m);
+      case 'mark': { const now = Date.now(); if (now - (p.markT || 0) < 1500 || p.dead) return; p.markT = now; const x = +m.x, y = +m.y; if (!Number.isFinite(x) || !Number.isFinite(y)) return; this.broadcast({ t: 'mark', x: r2(Math.max(0, Math.min(this.W, x))), y: r2(Math.max(0, Math.min(this.H, y))), n: p.name, id: p.id }); return; }
       case 'ping': return this.send(p, { t: 'pong', c: m.c });
       case 'fish': return this.onFish(p, m);
       case 'wake': return this.wake(p);

@@ -80,3 +80,7 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 - **Buff potions** (3 gel + an ingredient at a Workbench): Swiftness (+30% speed, carrot), Haste (mine 60% faster, glow mushroom), Ironskin (+4 defense, iron bar), Regeneration (1.5 HP/s for 60 s, wheat + apple). Active buffs show in the HUD with a countdown.
 - **Warden Visor** helmet (2 Warden Cores + 5 iron bars): +5 defense, +15 HP.
 - Item ids 169–173 used; tests: `test/quests.js`, `test/quests-ui.js`.
+
+## v1.10 — Co-op & building
+- **Wooden Fence** (2 planks + 1 fibre → 4): see-through solid block that keeps mobs and animals in or out; great for pens.
+- **Map markers:** press G (aim at a spot) to drop a beacon visible to everyone for 25 s, with your name and an edge arrow when it is off-screen. Tests: `test/coop.js`.
