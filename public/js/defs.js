@@ -37,6 +37,7 @@
     LEATHER: 136, WOOL: 137, FEATHER: 138, RAW_FISH: 139, COOKED_FISH: 140, FISHING_ROD: 141, LURE: 142, LEATHER_CAP: 143, LEATHER_TUNIC: 144, GOLDEN_CARP: 145,
     WARDEN_SIGIL: 146, WARDEN_CORE: 147, WARDEN_BLADE: 148, WARDEN_MAIL: 149,
     WHEAT_SEEDS: 164, WHEAT: 165, BREAD: 166, CARROT: 167, HOE: 168,
+    SWIFT_POTION: 169, HASTE_POTION: 170, IRON_POTION: 171, REGEN_POTION: 172, WARDEN_HELM: 173,
     CLAY_BRICK: 130, FIBER: 131, WOOD_SHOVEL: 132, STONE_SHOVEL: 133, COPPER_SHOVEL: 134, IRON_SHOVEL: 135,
   };
   const TIER_NAMES = ['Hand', 'Wooden', 'Stone', 'Copper', 'Iron', 'Crystal'];
@@ -245,9 +246,20 @@
   ITEMS[I.RAW_MEAT] = { id: I.RAW_MEAT, name: 'Raw Meat', stack: 99, heal: 8 };
   ITEMS[I.COOKED_MEAT] = { id: I.COOKED_MEAT, name: 'Cooked Meat', stack: 99, heal: 45 };
   ITEMS[I.POTION] = { id: I.POTION, name: 'Healing Potion', stack: 20, heal: 70 };
+  // timed buff potions: drink to gain an effect for `dur` seconds
+  const BUFFS = {
+    swift: { name: 'Swiftness', dur: 120, icon: '»', col: '#7be0ff', desc: '+30% move speed' },
+    haste: { name: 'Mining Haste', dur: 120, icon: '⛏', col: '#ffd45c', desc: 'Mine 60% faster' },
+    iron: { name: 'Ironskin', dur: 150, icon: '◆', col: '#c3ccd6', desc: '+4 defense' },
+    regen: { name: 'Regeneration', dur: 60, icon: '+', col: '#ff7b8a', desc: 'Heal 1.5 HP/s' },
+  };
+  ITEMS[I.SWIFT_POTION] = { id: I.SWIFT_POTION, name: 'Swiftness Potion', stack: 20, buff: 'swift' };
+  ITEMS[I.HASTE_POTION] = { id: I.HASTE_POTION, name: 'Haste Potion', stack: 20, buff: 'haste' };
+  ITEMS[I.IRON_POTION] = { id: I.IRON_POTION, name: 'Ironskin Potion', stack: 20, buff: 'iron' };
+  ITEMS[I.REGEN_POTION] = { id: I.REGEN_POTION, name: 'Regeneration Potion', stack: 20, buff: 'regen' };
   ITEMS[I.MUSHROOM] = { id: I.MUSHROOM, name: 'Glow Mushroom', stack: 99, heal: 12 };
   const armor = (id, name, slot, def, hp) => { ITEMS[id] = { id, name, stack: 1, armor: slot, def, hp: hp || 0 }; };
-  armor(I.COPPER_HELM, 'Copper Helm', 'head', 2); armor(I.IRON_HELM, 'Iron Helm', 'head', 3); armor(I.GOLD_HELM, 'Gold Crown', 'head', 4, 10);
+  armor(I.WARDEN_HELM, 'Warden Visor', 'head', 5, 15); armor(I.COPPER_HELM, 'Copper Helm', 'head', 2); armor(I.IRON_HELM, 'Iron Helm', 'head', 3); armor(I.GOLD_HELM, 'Gold Crown', 'head', 4, 10);
   armor(I.COPPER_MAIL, 'Copper Mail', 'body', 3); armor(I.IRON_MAIL, 'Iron Mail', 'body', 5); armor(I.CRYSTAL_MAIL, 'Crystal Mail', 'body', 8);
   ITEMS[I.WARDEN_SIGIL] = { id: I.WARDEN_SIGIL, name: 'Warden Sigil', stack: 5, summon: 'warden' };
   ITEMS[I.WARDEN_CORE] = { id: I.WARDEN_CORE, name: 'Warden Core', stack: 20 };
@@ -371,6 +383,11 @@
     R(T.CRYSTAL_LAMP, 2, [[T.CRYSTAL, 2], [T.GLASS, 2]], 'bench', 'decor'),
     R(I.WARDEN_SIGIL, 1, [[T.CRYSTAL, 5], [I.IRON_BAR, 4], [I.GEL, 3], [I.RAW_FISH, 3]], 'bench', 'tools'),
     R(I.WARDEN_BLADE, 1, [[I.WARDEN_CORE, 2], [I.IRON_BAR, 6]], 'bench', 'tools'),
+    R(I.WARDEN_HELM, 1, [[I.WARDEN_CORE, 2], [I.IRON_BAR, 5]], 'bench', 'tools'),
+    R(I.SWIFT_POTION, 1, [[I.GEL, 2], [I.CARROT, 1]], 'bench', 'misc'),
+    R(I.HASTE_POTION, 1, [[I.GEL, 2], [I.MUSHROOM, 1]], 'bench', 'misc'),
+    R(I.IRON_POTION, 1, [[I.GEL, 2], [I.IRON_BAR, 1]], 'bench', 'misc'),
+    R(I.REGEN_POTION, 1, [[I.GEL, 2], [I.WHEAT, 1], [I.APPLE, 1]], 'bench', 'misc'),
     R(I.WARDEN_MAIL, 1, [[I.WARDEN_CORE, 3], [I.IRON_BAR, 8]], 'bench', 'tools'),
     R(I.HOE, 1, [[T.PLANKS, 2], [I.FIBER, 2]], 'bench', 'tools'),
     R(I.BREAD, 1, [[I.WHEAT, 3]], 'bench', 'misc'),
@@ -495,9 +512,35 @@
     b.onGround = ground;
   }
 
+
+  // quest book: ev = event kind, k = optional filter list (tile ids / mob names / item ids), n = amount needed
+  const POTS = [I.SWIFT_POTION, I.HASTE_POTION, I.IRON_POTION, I.REGEN_POTION];
+  const QUESTS = [
+    { id: 'wood', name: 'Timber!', desc: 'Chop 15 logs', ev: 'mine', k: [T.LOG, T.PINE_LOG, T.MAPLE_LOG, T.WILLOW_LOG], n: 15, reward: [[I.POTION, 2]] },
+    { id: 'stone', name: 'Stone Age', desc: 'Mine 40 stone', ev: 'mine', k: [T.STONE], n: 40, reward: [[I.SWIFT_POTION, 2]] },
+    { id: 'ore', name: 'Prospector', desc: 'Mine 12 copper or iron ore', ev: 'mine', k: [T.COPPER, T.IRON], n: 12, reward: [[I.HASTE_POTION, 2]] },
+    { id: 'gold', name: 'Gold Rush', desc: 'Mine 6 gold ore', ev: 'mine', k: [T.GOLD], n: 6, reward: [[I.IRON_POTION, 2]] },
+    { id: 'gem', name: 'Gem Hunter', desc: 'Mine 6 glow crystals', ev: 'mine', k: [T.CRYSTAL], n: 6, reward: [[I.REGEN_POTION, 3]] },
+    { id: 'smith', name: 'Ironworks', desc: 'Craft an iron pickaxe, axe or sword', ev: 'craft', k: [I.IRON_PICK, I.IRON_AXE, I.IRON_SWORD], n: 1, reward: [[I.IRON_BAR, 4]] },
+    { id: 'slime', name: 'Slime Squasher', desc: 'Defeat 10 slimes', ev: 'kill', k: ['slime'], n: 10, reward: [[I.POTION, 3]] },
+    { id: 'zombie', name: 'Night Watch', desc: 'Defeat 10 zombies', ev: 'kill', k: ['zombie'], n: 10, reward: [[I.IRON_POTION, 2]] },
+    { id: 'bones', name: 'Bone Collector', desc: 'Defeat 8 skeletons', ev: 'kill', k: ['skeleton'], n: 8, reward: [[I.HASTE_POTION, 2]] },
+    { id: 'boom', name: 'Bomb Squad', desc: 'Defeat 5 boomers', ev: 'kill', k: ['boomer'], n: 5, reward: [[I.SWIFT_POTION, 3]] },
+    { id: 'spider', name: 'Web Cutter', desc: 'Defeat 5 cave spiders', ev: 'kill', k: ['spider'], n: 5, reward: [[I.REGEN_POTION, 2]] },
+    { id: 'fish1', name: 'Angler', desc: 'Catch 5 fish', ev: 'fish', n: 5, reward: [[I.LURE, 5]] },
+    { id: 'fish2', name: 'Master Angler', desc: 'Catch 25 fish', ev: 'fish', n: 25, reward: [[I.POTION, 5], [I.GOLD_BAR, 2]] },
+    { id: 'bread', name: 'Baker', desc: 'Bake 3 bread', ev: 'craft', k: [I.BREAD], n: 3, reward: [[I.REGEN_POTION, 2]] },
+    { id: 'farm', name: 'Green Thumb', desc: 'Harvest 20 ripe crops', ev: 'harvest', n: 20, reward: [[I.WHEAT_SEEDS, 10], [I.CARROT, 5]] },
+    { id: 'breed', name: 'Shepherd', desc: 'Breed animals 3 times', ev: 'breed', n: 3, reward: [[I.LEATHER, 6], [I.WOOL, 6]] },
+    { id: 'tame', name: "Man's Best Friend", desc: 'Tame a husky', ev: 'tame', n: 1, reward: [[I.SWIFT_POTION, 2]] },
+    { id: 'brew', name: 'Alchemist', desc: 'Brew 5 buff potions', ev: 'craft', k: POTS, n: 5, reward: [[I.GOLD_BAR, 3]] },
+    { id: 'boss', name: 'Warden Slayer', desc: 'Defeat the Hollow Warden', ev: 'boss', n: 1, reward: [[I.GOLD_BAR, 6], [I.REGEN_POTION, 4]] },
+    { id: 'vet', name: 'Veteran', desc: 'Defeat 100 monsters', ev: 'kill', n: 100, reward: [[I.GOLD_BAR, 5], [I.IRON_POTION, 3]] },
+  ];
+
   const empty = () => null;
   function maxHpFor(eq) { let hp = C.PLAYER_HP; if (eq) for (const k of ['head', 'body', 'charm']) { const s = eq[k]; if (s && ITEMS[s[0]]) hp += ITEMS[s[0]].hp || 0; } return hp; }
-  function defenseFor(eq) { let d = 0; if (eq) for (const k of ['head', 'body', 'charm']) { const s = eq[k]; if (s && ITEMS[s[0]]) d += ITEMS[s[0]].def || 0; } return d; }
+  function defenseFor(eq, buffs) { let d = 0; if (eq) for (const k of ['head', 'body', 'charm']) { const s = eq[k]; if (s && ITEMS[s[0]]) d += ITEMS[s[0]].def || 0; } if (buffs && buffs.iron) d += 4; return d; }
   /** Can tool item `it` (or bare hands) harvest block `id` at all? */
   function canMine(id, it) {
     const b = BLOCKS[id]; if (!b || !isFinite(b.hard)) return false;
@@ -521,5 +564,5 @@
   function toolWear(id) { const b = BLOCKS[id]; return b && b.hard >= 6 ? 2 : 1; }
   /** message when `it` can't mine `id` */
   function needText(id) { const b = BLOCKS[id]; return `${b ? b.name : 'This block'} needs a ${TIER_NAMES[Math.min(5, b ? b.tier : 1)]} Pickaxe or better`; }
-  return { FISH_LOOT, rollCatch, LEAF, DECOR, BACKWALL, CROPS, FEED, DOORTILE, COLL, BOXES, SHAPE, SHAPE_OF, SHAPED, WALLED, CLEAR, OPAQUE, LOGS, STRIPPED, CATS, TIER_NAMES, canMine, toolWear, needText, BIOMES, T, I, BLOCKS, ITEMS, RECIPES, MOBS, C, SOLID, PLACEABLE, isSolidTile, moveBody, maxHpFor, defenseFor, mineTime, empty };
+  return { QUESTS, BUFFS, FISH_LOOT, rollCatch, LEAF, DECOR, BACKWALL, CROPS, FEED, DOORTILE, COLL, BOXES, SHAPE, SHAPE_OF, SHAPED, WALLED, CLEAR, OPAQUE, LOGS, STRIPPED, CATS, TIER_NAMES, canMine, toolWear, needText, BIOMES, T, I, BLOCKS, ITEMS, RECIPES, MOBS, C, SOLID, PLACEABLE, isSolidTile, moveBody, maxHpFor, defenseFor, mineTime, empty };
 });

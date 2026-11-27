@@ -66,10 +66,11 @@
   <div id="hotname"></div>
   <div id="hotbar"></div>
   <div id="toasts"></div>
+  <div id="buffs"></div>
   <div id="touch">
     <div class="pad"><button id="t-left">◀</button><button id="t-right">▶</button></div>
     <div class="acts"><button id="t-mode" class="mode">⛏</button><button id="t-jump">▲</button><button id="t-down">▼</button></div>
-    <div class="side"><button id="t-inv">🎒</button><button id="t-chat">💬</button><button id="t-menu">☰</button></div>
+    <div class="side"><button id="t-inv">🎒</button><button id="t-quest">📜</button><button id="t-chat">💬</button><button id="t-menu">☰</button></div>
   </div>
   <div id="death"><h1>You died</h1><p id="death-by"></p><small>Respawning…</small></div>
 </div>
@@ -88,6 +89,10 @@
       <div id="recipe-detail"></div></div>
   </div>
 </div>
+
+<div id="quests" class="modal"><div class="panel narrow">
+  <div class="ph"><h3>📜 Quest Book</h3><button class="x" data-close>✕</button></div>
+  <div id="quest-body"></div></div></div>
 
 <div id="pause" class="modal"><div class="panel narrow">
   <div class="ph"><h3 id="pause-title">Paused</h3><button class="x" data-close>✕</button></div>

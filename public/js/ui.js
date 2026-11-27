@@ -100,6 +100,7 @@ const UI = (() => {
     const it = ITEMS[s[0]]; let h = `<b>${it.name}</b>`;
     if (it.kind) h += `<small>${it.kind === 'sword' ? 'Weapon · ' + it.dmg + ' damage' : ({ pick: 'Pickaxe', axe: 'Axe', shovel: 'Shovel', rod: 'Fishing rod', hoe: 'Hoe' }[it.kind]) + (it.kind === 'rod' ? '' : ' · ' + DEFS.TIER_NAMES[it.tier] + ' tier · speed ×' + it.speed)}</small>${it.kind === 'hoe' ? '<small>Right-click grass or dirt to till farmland. Plant seeds or carrots on it; water nearby makes crops grow faster</small>' : ''}${it.kind === 'rod' ? '<small>Right-click water to cast, click again at the ! bite</small>' : ''}${it.kind === 'pick' ? `<small>Mines ${['', 'stone & slate', 'copper ore', 'iron ore & crystal', 'gold ore', 'everything'][it.tier]}</small>` : it.kind === 'axe' ? '<small>Fells trees · right-click a log to strip it</small>' : it.kind === 'shovel' ? '<small>Digs dirt, sand, clay & gravel fast</small>' : ''}<small>Durability ${s[2]}/${it.dur}</small>`;
     if (it.armor) h += `<small>${it.armor} slot${it.def ? ' · +' + it.def + ' defense' : ''}${it.hp ? ' · +' + it.hp + ' max HP' : ''}</small><small>Right-click to equip</small>`;
+    if (it.buff) { const bf = DEFS.BUFFS[it.buff]; h += `<small>${bf.desc} for ${bf.dur}s</small>`; }
     if (it.heal) h += `<small>Heals ${it.heal} HP</small>`; if (it.block !== undefined) { const bl = BLOCKS[it.block]; h += `<small>Placeable${DEFS.SHAPE[it.block] ? ' ' + DEFS.SHAPE[it.block].kind.replace('stairR', 'stairs') : ' block'}${bl && bl.tier ? ' · mined with ' + DEFS.TIER_NAMES[bl.tier] + ' pickaxe+' : ''}</small>`; } return h;
   }
   const tip = $('tip');
@@ -177,14 +178,32 @@ const UI = (() => {
   // ------------------------------------------------------------ modals
   function openInventory() { if (state.invOpen) return; state.invOpen = true; $('inv').classList.add('on'); state.held = null; renderInv(); Sound.play('open'); }
   function closeInventory() { if (!state.invOpen) return; state.invOpen = false; $('inv').classList.remove('on'); state.held = null; hideTip(); if (S.chest) Game.send({ t: 'chestClose' }), S.chest = null; Sound.play('close'); }
+  function openQuests() { state.qOpen = true; $('quests').classList.add('on'); renderQuests(); Sound.play('open'); }
+  function closeQuests() { state.qOpen = false; $('quests').classList.remove('on'); }
+  function toggleQuests() { state.qOpen ? closeQuests() : openQuests(); }
+  function renderQuests() {
+    const b = $('quest-body'); if (!b) return; const q = S.q || { prog: {}, done: {} };
+    const rows = DEFS.QUESTS.map((x) => ({ x, d: !!q.done[x.id], v: q.prog[x.id] || 0 })).sort((a, c) => a.d - c.d);
+    const nd = rows.filter((r) => r.d).length;
+    b.innerHTML = `<small style="color:var(--mu)">${nd} / ${rows.length} complete — rewards are added to your bag (press Q)</small>` + rows.map(({ x, d, v }) => `<div class="qrow${d ? ' done' : ''}"><div class="qn"><span>${d ? '✔ ' : ''}${esc(x.name)}</span><span>${d ? 'Done' : v + ' / ' + x.n}</span></div><small>${esc(x.desc)}</small>${d ? '' : `<div class="qbar"><i style="width:${v / x.n * 100}%"></i></div>`}<small>Reward: ${x.reward.map((r) => r[1] + '× ' + esc(DEFS.ITEMS[r[0]].name)).join(', ')}</small></div>`).join('');
+  }
+  function updateQuests() { if (state.qOpen) renderQuests(); }
+  function updateBuffs() {
+    const el = $('buffs'); if (!el) return; const now = Date.now(); let h = '';
+    for (const k in (S.buffs || {})) { const l = Math.ceil((S.buffs[k] - now) / 1000); if (l <= 0) continue; const d = DEFS.BUFFS[k]; h += `<div class="bf" style="border-color:${d.col}"><b style="color:${d.col}">${d.icon}</b>${d.name} ${l}s</div>`; }
+    if (el._h !== h) { el._h = h; el.innerHTML = h; }
+  }
+  setInterval(() => { if (S.buffs && Object.keys(S.buffs).length) updateBuffs(); }, 500);
   function toggleInventory() { state.invOpen ? closeInventory() : openInventory(); }
   function openPause() { state.pauseOpen = true; $('pause').classList.add('on'); buildPause(); Sound.play('open'); }
   function closePause() { state.pauseOpen = false; $('pause').classList.remove('on'); }
-  function closeModals() { closeInventory(); closePause(); closeChat(); }
-  function modalOpen() { return state.invOpen || state.pauseOpen; }
+  function closeModals() { closeInventory(); closePause(); closeQuests(); closeChat(); }
+  function modalOpen() { return state.invOpen || state.pauseOpen || state.qOpen; }
   function escape() { if (state.chatOpen) closeChat(); else if (modalOpen()) closeModals(); else openPause(); }
   document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeModals));
   $('inv').addEventListener('pointerdown', (e) => { if (e.target === $('inv')) closeInventory(); });
+  $('quests').addEventListener('pointerdown', (e) => { if (e.target === $('quests')) closeQuests(); });
+  $('t-quest').addEventListener('pointerdown', (e) => { e.preventDefault(); toggleQuests(); });
   $('pause').addEventListener('pointerdown', (e) => { if (e.target === $('pause')) closePause(); });
   function buildPause() {
     const b = $('pause-body'); b.innerHTML = '';
@@ -192,6 +211,7 @@ const UI = (() => {
     const btn = (t, fn, cls) => { const x = document.createElement('button'); x.textContent = t; if (cls) x.className = cls; x.onclick = fn; b.appendChild(x); return x; };
     $('pause-title').textContent = S.wname;
     btn('▶ Resume', closePause, 'pri');
+    btn('📜 Quest Book', () => { closePause(); openQuests(); });
     btn(`📋 Invite friends — room ${S.code}`, copyInvite);
     sec('World'); const p = S.prog || {}; b.insertAdjacentHTML('beforeend', `<small style="color:var(--mu)">Nights survived ${p.nights || 0} · blocks mined ${p.mined || 0} · foes slain ${p.kills || 0} · difficulty ${S.settings.difficulty}</small>`);
     sec('Your character'); const cd = document.createElement('div'); cd.id = 'pause-char'; b.appendChild(cd); buildChar(cd, null);
@@ -260,5 +280,5 @@ const UI = (() => {
   const q = new URLSearchParams(location.search); if (q.get('server')) { Settings.d.server = q.get('server'); Settings.save(); }
   if (q.get('room')) { go('worlds'); $('join-code').value = q.get('room').toUpperCase(); }
   addEventListener('beforeunload', () => {});
-  return { sleeping, go, err, showLoading, hideLoading, enter, left, updateInv, updateSel, updateStat, updatePlayers, updateProg, chat: (n, m, id) => addMsg(`<b>${esc(n)}</b>: ${esc(m)}`), sys: (m) => addMsg(esc(m), 'sys'), toast, dead, respawned, chest, crafted: (id) => toast('Crafted ' + itemName(id)), hostSettings: () => { if (state.pauseOpen) buildPause(); }, reconnecting: (v) => $('reconnect').classList.toggle('on', v), error: err, typing, modalOpen, closeModals, toggleInventory, openInventory, escape, openChat, togglePlayers, frame };
+  return { openQuests, toggleQuests, updateQuests, updateBuffs, sleeping, go, err, showLoading, hideLoading, enter, left, updateInv, updateSel, updateStat, updatePlayers, updateProg, chat: (n, m, id) => addMsg(`<b>${esc(n)}</b>: ${esc(m)}`), sys: (m) => addMsg(esc(m), 'sys'), toast, dead, respawned, chest, crafted: (id) => toast('Crafted ' + itemName(id)), hostSettings: () => { if (state.pauseOpen) buildPause(); }, reconnecting: (v) => $('reconnect').classList.toggle('on', v), error: err, typing, modalOpen, closeModals, toggleInventory, openInventory, escape, openChat, togglePlayers, frame };
 })();

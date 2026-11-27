@@ -126,7 +126,7 @@ const Game = (() => {
     applyWelcome(w, false); return w;
   }
   function applyWelcome(w, isReconnect) {
-    S.id = w.id; S.code = w.code; S.wname = w.wname; S.host = w.host; S.settings = w.settings; S.time = w.time; S.inv = w.inv; S.eq = w.eq; S.hp = w.hp; S.maxhp = w.maxhp; S.def = w.def; S.prog = w.prog || {};
+    S.id = w.id; S.code = w.code; S.wname = w.wname; S.host = w.host; S.settings = w.settings; S.time = w.time; S.inv = w.inv; S.eq = w.eq; S.hp = w.hp; S.maxhp = w.maxhp; S.def = w.def; S.q = w.q || { prog: {}, done: {} }; S.buffs = {}; for (const k in (w.buffs || {})) S.buffs[k] = Date.now() + w.buffs[k] * 1000; S.prog = w.prog || {};
     S.players.clear(); S.mobs.clear(); S.drops.clear(); S.plist = w.players; S.dead = false; S.chest = null;
     if (!S.me || !isReconnect) {
       S.me = { x: w.x, y: w.y, vx: 0, vy: 0, w: C.PW, h: C.PH, f: 1, onGround: false, step: true, swing: -1, swingT: 0, sendT: 0, coyote: 0, jumpBuf: 0, hurt: 0, anim: 0, walkT: 0, inWater: false, stepT: 0, lastSend: '', fall: 0 };
@@ -159,6 +159,9 @@ const Game = (() => {
       case 'snap': return onSnap(m);
       case 'tiles': for (const [x, y, v] of m.c) { tiles[y * W + x] = v; if (DEFS.OPAQUE[v]) { if (y < top[x]) top[x] = y; } else if (y === top[x]) rescanTop(x); } return;
       case 'inv': S.inv = m.inv; S.eq = m.eq; UI.updateInv(); return;
+      case 'q': S.q = m.q; UI.updateQuests(); return;
+      case 'questDone': { const q = DEFS.QUESTS.find((x) => x.id === m.id); if (q) UI.toast('📜 Quest complete: ' + q.name + '! Reward: ' + q.reward.map((r) => r[1] + '× ' + DEFS.ITEMS[r[0]].name).join(', ')); Sound.play('craft'); return; }
+      case 'buffs': S.buffs = {}; for (const k in m.b) S.buffs[k] = Date.now() + m.b[k] * 1000; UI.updateBuffs(); return;
       case 'stat': { const lost = m.hp < S.hp; S.hp = m.hp; S.maxhp = m.maxhp; S.def = m.def; UI.updateStat(lost); return; }
       case 'plist': S.plist = m.p; for (const q of m.p) { const e = S.players.get(q.id); if (e && q.look) e.look = Gfx.playerLook(q.look); } S._myLook = null; UI.updatePlayers(); return;
       case 'chat': UI.chat(m.n, m.m, m.id); if (m.id !== S.id) Sound.play('chat'); return;
@@ -248,6 +251,7 @@ const Game = (() => {
       case 'mobdie': Sound.play('mobdie'); for (let i = 0; i < 16; i++) part(x, y, (Math.random() - 0.5) * 7, -Math.random() * 6, 0.7, [220, 220, 240], 4, 0.6); break;
       case 'hurt': if (v === S.id) { Sound.play('hurt'); S.flash = 1; if (Settings.d.shake) S.shake = 0.35; } else { Sound.play('mobhit'); } for (let i = 0; i < 8; i++) part(x, y, (Math.random() - 0.5) * 6, -Math.random() * 5, 0.6, [230, 40, 50], 3); break;
       case 'die': for (let i = 0; i < 30; i++) part(x, y, (Math.random() - 0.5) * 9, -Math.random() * 8, 1.2, [230, 40, 50], 4); break;
+      case 'quest': Sound.play('craft'); for (let i = 0; i < 16; i++) part(x + (Math.random() - 0.5), y + 1, (Math.random() - 0.5) * 3, -2 - Math.random() * 3, 1.2, [255, 220, 90], 3, -0.2); break;
       case 'heal': Sound.play('heal'); for (let i = 0; i < 12; i++) part(x + (Math.random() - 0.5), y + 1, (Math.random() - 0.5), -2 - Math.random() * 2, 1, [110, 240, 140], 3, -0.2); break;
       case 'pickup': if (v === S.id) Sound.play('pickup'); break;
       case 'smoke': Sound.play('smoke'); part(x, y, (Math.random() - 0.5), -2, 0.8, [90, 90, 90], 4, -0.3); break;
@@ -268,6 +272,7 @@ const Game = (() => {
     if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' '].includes(k)) e.preventDefault();
     if (k >= '0' && k <= '9') { setSel(k === '0' ? 9 : +k - 1); }
     else if (k === 'e' || k === 'i') UI.toggleInventory();
+    else if (k === 'q') UI.toggleQuests();
     else if (k === 'escape') UI.escape();
     else if (k === 't' || k === 'enter') { e.preventDefault(); UI.openChat(); }
     else if (k === 'q') { if (S.inv[S.sel]) send({ t: 'drop', i: S.sel, all: e.shiftKey }); }
@@ -307,7 +312,7 @@ const Game = (() => {
     const wantJump = !modal && (keys.has(' ') || keys.has('w') || keys.has('arrowup') || S.input.jump);
     const cx = Math.floor(m.x), cy = Math.floor(m.y + m.h * 0.5), cyFeet = Math.floor(m.y + m.h * 0.85);
     const wasWater = m.inWater; m.inWater = get(cx, cy) === T.WATER; if (m.inWater && !wasWater) { Sound.play('splash'); for (let i = 0; i < 10; i++) part(m.x, m.y + m.h * 0.5, (Math.random() - 0.5) * 5, -Math.random() * 5, 0.6, [150, 200, 255], 3); }
-    const sprint = !modal && (keys.has('shift')) && m.onGround; const run = C.RUN * (m.inWater ? 0.6 : 1) * (sprint ? 1.35 : 1);
+    const sprint = !modal && (keys.has('shift')) && m.onGround; const run = C.RUN * (m.inWater ? 0.6 : 1) * (sprint ? 1.35 : 1) * (S.buffs && S.buffs.swift ? 1.3 : 1);
     const accel = m.onGround ? 16 : 8;
     m.vx += (dir * run - m.vx) * Math.min(1, dt * (dir ? accel : (m.onGround ? 14 : 3)));
     if (m.onGround) m.coyote = 0.1; else m.coyote -= dt;

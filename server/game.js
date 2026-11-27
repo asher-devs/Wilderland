@@ -102,10 +102,10 @@ class World {
       x: this.spawn.x + (Math.random() - 0.5) * 4, y: this.spawn.y, vx: 0, vy: 0, f: 1, a: 0, w: C.PW, h: C.PH,
       inv: new Array(C.INV).fill(null), eq: { head: null, body: null, charm: null }, hp: C.PLAYER_HP, maxhp: C.PLAYER_HP,
       sel: 0, invul: 0, regen: 0, mine: null, atkCd: 0, useCd: 0, dead: false, deadT: 0, chest: null, lastMv: Date.now(),
-      invDirty: true, statDirty: true, msgs: 0, msgT: Date.now(), chatTimes: [], returning: !!sv, look: cleanLook(look || (sv && sv.look)),
+      buffs: {}, q: { prog: {}, done: {} }, qDirty: false, invDirty: true, statDirty: true, msgs: 0, msgT: Date.now(), chatTimes: [], returning: !!sv, look: cleanLook(look || (sv && sv.look)),
     };
     if (sv) {
-      p.pet = !!sv.pet; p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
+      p.pet = !!sv.pet; if (sv.q) p.q = { prog: sv.q.prog || {}, done: sv.q.done || {} }; p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
       if (typeof sv.x === 'number' && sv.y > 0) { p.x = sv.x; p.y = sv.y; }
     } else {
       addToInv(p.inv, I.APPLE, 3); addToInv(p.inv, T.TORCH, 6);
@@ -122,7 +122,22 @@ class World {
     for (let ty = Math.floor(y); ty <= Math.floor(y + b.h - 1e-6); ty++) for (let tx = Math.floor(x - hw); tx <= Math.floor(x + hw - 1e-6); tx++) if (this.coll(tx, ty)) return true;
     return false;
   }
-  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y), pet: p.pet ? 1 : 0 } }; }
+  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y), pet: p.pet ? 1 : 0, q: p.q } }; }
+  /** quest book: record progress for a player; ev = mine|kill|craft|fish|harvest|breed|tame|boss, key = tile id / mob type / item id */
+  quest(p, ev, key, n = 1) {
+    if (!p || !p.q) return;
+    for (const q of D.QUESTS) {
+      if (q.ev !== ev || p.q.done[q.id] || (q.k && !q.k.includes(key))) continue;
+      const v = (p.q.prog[q.id] || 0) + n; p.q.prog[q.id] = Math.min(q.n, v); p.qDirty = true;
+      if (v >= q.n) {
+        p.q.done[q.id] = 1; delete p.q.prog[q.id];
+        for (const [id, c] of q.reward) { const left = addToInv(p.inv, id, c, 0); if (left > 0) this.spawnDrop(id, left, p.x, p.y); }
+        p.invDirty = true; this.dirty = true;
+        this.send(p, { t: 'questDone', id: q.id }); this.fx.push(['quest', p.x, p.y, p.id]);
+      }
+    }
+  }
+  buffList(p) { const now = Date.now(), o = {}; for (const k in p.buffs) { const l = (p.buffs[k] - now) / 1000; if (l > 0) o[k] = Math.ceil(l); } return o; }
   dropPlayer(p, silent) {
     if (!this.players.has(p.id)) return;
     this.players.delete(p.id);
@@ -146,7 +161,7 @@ class World {
     for (let x = 0; x < W; x++) raw.writeUInt16LE(this.surf[x], W * H + W + x * 2);
     this.send(p, {
       t: 'welcome', id: p.id, code: this.code, wname: this.name, W, H, host: p.pid === this.host, settings: this.settings,
-      spawn: this.spawn, time: this.state.time, x: p.x, y: p.y, hp: p.hp, maxhp: p.maxhp, def: D.defenseFor(p.eq),
+      spawn: this.spawn, time: this.state.time, x: p.x, y: p.y, hp: p.hp, maxhp: p.maxhp, def: D.defenseFor(p.eq, p.buffs), q: p.q, buffs: this.buffList(p),
       inv: p.inv, eq: p.eq, players: this.plist(), prog: this.prog(), returning: p.returning,
     });
     p.ws.send(zlib.deflateSync(raw, { level: 4 }));
@@ -223,7 +238,7 @@ class World {
     const dt = Math.min(0.2, (now - p.mine.last) / 1000); p.mine.last = now;
     const tool = this.bestTool(p, id);
     if (!isFinite(tool.time)) { p.mine = null; this.send(p, { t: 'mp', x, y, p: 0, no: 1 }); return; }
-    p.mine.prog += dt / tool.time;
+    p.mine.prog += dt / tool.time * (p.buffs.haste ? 1.6 : 1);
     if (now - p.mine.fx > 180) { p.mine.fx = now; this.fx.push(['hit', x + 0.5, y + 0.5, id]); }
     if (p.mine.prog >= 1) {
       p.mine = null;
@@ -252,6 +267,7 @@ class World {
       for (const q of this.players.values()) if (q.sleep && (q.sleep.x === x || q.sleep.x === ox) && q.sleep.y === y) this.wake(q);
     }
     this.cropDrops(id, x, y);
+    if (p) { this.quest(p, 'mine', id); if (D.CROPS.ripe[id]) this.quest(p, 'harvest', id); }
     if (id === T.PLANT && Math.random() < D.CROPS.seedChance) this.spawnDrop(I.WHEAT_SEEDS, 1, x + 0.5, y + 0.5);
     if (b.drop >= 0 && Math.random() < b.dropP) this.spawnDrop(b.drop, 1, x + 0.5, y + 0.5);
     if (D.LEAF[id] && id !== T.PINE && Math.random() < 0.07) this.spawnDrop(I.APPLE, 1, x + 0.5, y + 0.5);
@@ -344,7 +360,7 @@ class World {
     if (mob.type === 'warden') dmg *= mob.sh ? 0.35 : mob.stun > 0 ? 1.5 : 1;
     dmg = Math.max(1, Math.round(dmg));
     if (mob.type === 'warden') { mob.hp -= dmg; mob.hurt = 0.12; this.fx.push(['mobhit', mob.x + (Math.random() - 0.5) * 2.4, mob.y + 1 + Math.random() * 3, dmg]);
-      if (mob.hp <= 0) { this.mobs.delete(mob.id); this.state.kills++; this.state.bosses = (this.state.bosses || 0) + 1; this.dirty = true; this.fx.push(['bossdie', mob.x, mob.y + mob.h / 2, 0]);
+      if (mob.hp <= 0) { this.mobs.delete(mob.id); this.state.kills++; this.state.bosses = (this.state.bosses || 0) + 1; this.dirty = true; for (const q of this.players.values()) if (Math.hypot(q.x - mob.x, q.y - mob.y) < 80) this.quest(q, 'boss', 'warden'); this.fx.push(['bossdie', mob.x, mob.y + mob.h / 2, 0]);
         for (const d of MOBS.warden.drops) if (Math.random() < d[1]) this.spawnDrop(d[0], d[2] + Math.floor(Math.random() * (d[3] - d[2] + 1)), mob.x + (Math.random() - 0.5) * 2, mob.y + 2);
         this.sys('🏆 The Hollow Warden has fallen!'); }
       return; }
@@ -352,7 +368,7 @@ class World {
     mob.hp -= dmg; mob.hurt = 0.3; mob.vx = dir * 7; mob.vy = -6; mob.ground = false;
     this.fx.push(['mobhit', mob.x, mob.y + mob.h / 2, dmg]);
     if (mob.hp <= 0) {
-      this.mobs.delete(mob.id); this.state.kills++;
+      this.mobs.delete(mob.id); this.state.kills++; if (p && !MOBS[mob.type].animal && !MOBS[mob.type].passive) this.quest(p, 'kill', mob.type);
       this.fx.push(['mobdie', mob.x, mob.y + mob.h / 2, mob.type]);
       for (const d of MOBS[mob.type].drops) if (Math.random() < d[1]) this.spawnDrop(d[0], d[2] + Math.floor(Math.random() * (d[3] - d[2] + 1)), mob.x, mob.y);
     }
@@ -427,7 +443,13 @@ class World {
   }
   onUse(p) {
     if (p.dead || Date.now() < p.useCd) return;
-    const s = p.inv[p.sel]; if (!s) return; const it = ITEMS[s[0]]; if (!it || !it.heal || p.hp >= p.maxhp) return;
+    const s = p.inv[p.sel]; if (!s) return; const it = ITEMS[s[0]];
+    if (it && it.buff) {
+      const b = D.BUFFS[it.buff]; p.useCd = Date.now() + 700; p.buffs[it.buff] = Date.now() + b.dur * 1000;
+      if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = p.statDirty = true; this.fx.push(['heal', p.x, p.y, p.id]);
+      this.send(p, { t: 'buffs', b: this.buffList(p) }); this.send(p, { t: 'toast', m: `${b.name}: ${b.desc} for ${b.dur}s` }); return;
+    }
+    if (!it || !it.heal || p.hp >= p.maxhp) return;
     p.useCd = Date.now() + 700; p.hp = Math.min(p.maxhp, p.hp + it.heal); p.statDirty = true;
     if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true; this.fx.push(['heal', p.x, p.y, p.id]);
   }
@@ -447,7 +469,7 @@ class World {
     for (const [id, n] of r.ing) removeFromInv(p.inv, id, n);
     if (!canFit(p.inv, r.out, r.n)) { p.inv = before; return this.send(p, { t: 'toast', m: 'Inventory full' }); }
     addToInv(p.inv, r.out, r.n);
-    p.invDirty = true; this.send(p, { t: 'crafted', item: r.out });
+    p.invDirty = true; this.send(p, { t: 'crafted', item: r.out }); this.quest(p, 'craft', r.out, r.n);
     const it = ITEMS[r.out];
     if (it && it.kind === 'pick') {
       const names = ['', 'Wooden', 'Stone', 'Copper', 'Iron', 'Crystal']; const key = names[it.tier];
@@ -525,6 +547,8 @@ class World {
       if (p.invul > 0) p.invul -= dt;
       if (p.dead) { p.deadT -= dt; if (p.deadT <= 0) this.respawn(p); continue; }
       if (p.sleep) { if (p.hp < p.sleep.hp - 0.5) this.wake(p); else p.sleep.hp = Math.max(p.sleep.hp, p.hp); } // being hurt wakes you
+      if (p.buffs.regen) { if (Date.now() > p.buffs.regen) { delete p.buffs.regen; } else if (p.hp < p.maxhp) { p.hp = Math.min(p.maxhp, p.hp + 1.5 * dt); p.statDirty = true; } }
+      for (const k in p.buffs) if (Date.now() > p.buffs[k]) { delete p.buffs[k]; this.send(p, { t: 'buffs', b: this.buffList(p) }); p.statDirty = true; }
       p.regen += dt; if (p.regen > 4 && p.hp < p.maxhp) { p.hp = Math.min(p.maxhp, p.hp + 3 * dt); p.statDirty = true; }
       // drop mining progress only if the client stopped sending 'mine' (NOT when the player simply stands still: idle clients send few 'mv' packets)
       if (p.mine && Date.now() - p.mine.last > 800) p.mine = null;
@@ -649,13 +673,13 @@ class World {
       if (hid === I.RAW_MEAT || hid === I.COOKED_MEAT) {
         if (p.pet) return this.send(p, { t: 'toast', m: 'You already have a husky companion' });
         eat();
-        if (Math.random() < (hid === I.COOKED_MEAT ? 0.6 : 0.35)) { mob.owner = p.id; mob.sit = false; mob.angry = 0; p.pet = true; this.dirty = true; this.fx.push(['tame', mob.x, mob.y, 1]); this.send(p, { t: 'toast', m: '🐕 The husky is now your companion! Tap it to sit/stand.' }); }
+        if (Math.random() < (hid === I.COOKED_MEAT ? 0.6 : 0.35)) { mob.owner = p.id; mob.sit = false; mob.angry = 0; p.pet = true; this.dirty = true; this.quest(p, 'tame', 'husky'); this.fx.push(['tame', mob.x, mob.y, 1]); this.send(p, { t: 'toast', m: '🐕 The husky is now your companion! Tap it to sit/stand.' }); }
         else this.fx.push(['tame', mob.x, mob.y, 0]);
       }
       return;
     }
     if (D.FEED[mob.type] && hid === D.FEED[mob.type] && !mob.baby && !(mob.love > 0) && !(mob.cool > 0)) {
-      eat(); mob.love = 14; this.fx.push(['love', mob.x, mob.y, 1]);
+      eat(); mob.love = 14; mob.feeder = p.id; this.fx.push(['love', mob.x, mob.y, 1]);
     }
   }
   growUp(mob) { const def = MOBS[mob.type]; mob.baby = false; mob.w = def.w; mob.h = def.h; mob.y -= def.h * 0.45; }
@@ -669,7 +693,7 @@ class World {
     for (let i = 0; i < lovers.length; i++) for (let j = i + 1; j < lovers.length; j++) {
       const a = lovers[i], b = lovers[j]; if (a.type !== b.type || a.love <= 0 || b.love <= 0) continue;
       if (Math.hypot(a.x - b.x, a.y - b.y) > 3.2) continue;
-      a.love = b.love = 0; a.cool = b.cool = 120; const def = MOBS[a.type];
+      a.love = b.love = 0; a.cool = b.cool = 120; for (const fid of new Set([a.feeder, b.feeder])) for (const q of this.players.values()) if (q.id === fid) this.quest(q, 'breed', a.type); const def = MOBS[a.type];
       const baby = this.addMob(a.type, (a.x + b.x) / 2, Math.min(a.y, b.y) + def.h * 0.45, 0, DIFF.normal); baby.baby = true; baby.age = 0; baby.w = def.w * 0.55; baby.h = def.h * 0.55; baby.hp = baby.maxhp = Math.max(3, Math.round(def.hp * 0.5));
       this.fx.push(['love', a.x, a.y, 1], ['love', b.x, b.y, 1], ['love', baby.x, baby.y, 1]);
     }
@@ -788,7 +812,7 @@ class World {
     this.fx.push(['stomp', mob.x, gy, 0]);
   }
   hurtPlayer(p, dmg, dir, by) {
-    const reduce = Math.min(0.65, D.defenseFor(p.eq) * 0.04);
+    const reduce = Math.min(0.65, D.defenseFor(p.eq, p.buffs) * 0.04);
     dmg = Math.max(1, Math.round(dmg * (1 - reduce)));
     p.hp -= dmg; p.invul = 0.9; p.regen = 0; p.statDirty = true;
     this.send(p, { t: 'kb', vx: dir * 7, vy: -7 });
@@ -1049,7 +1073,7 @@ class World {
     const ln = p.line, cave = ln.ty > this.surf[Math.max(0, Math.min(this.W - 1, ln.tx))] + 14;
     const [id, n] = D.rollCatch(this.biome[Math.max(0, Math.min(this.W - 1, ln.tx))], cave, ln.lure, Math.random);
     const left = addToInv(p.inv, id, n, 0); if (left > 0) this.spawnDrop(id, left, p.x, p.y);
-    p.invDirty = true; this.state.fished = (this.state.fished || 0) + 1; this.dirty = true;
+    p.invDirty = true; this.state.fished = (this.state.fished || 0) + 1; this.dirty = true; this.quest(p, 'fish', id);
     this.fx.push(['catch', ln.x, ln.y, id]);
     this.send(p, { t: 'toast', m: `Caught ${n > 1 ? n + '× ' : ''}${ITEMS[id].name}!` });
     s[2]--; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); }
@@ -1093,7 +1117,8 @@ class World {
     this.fx = [];
     for (const p of this.players.values()) {
       if (p.invDirty) { p.invDirty = false; this.send(p, { t: 'inv', inv: p.inv, eq: p.eq }); }
-      if (p.statDirty) { p.statDirty = false; this.send(p, { t: 'stat', hp: Math.ceil(p.hp), maxhp: p.maxhp, def: D.defenseFor(p.eq) }); }
+      if (p.statDirty) { p.statDirty = false; this.send(p, { t: 'stat', hp: Math.ceil(p.hp), maxhp: p.maxhp, def: D.defenseFor(p.eq, p.buffs) }); }
+      if (p.qDirty) { p.qDirty = false; this.send(p, { t: 'q', q: p.q }); }
     }
     if (this.tick % 100 === 0 && this.players.size) this.broadcast({ t: 'prog', prog: this.prog() });
   }

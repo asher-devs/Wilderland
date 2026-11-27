@@ -74,3 +74,9 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 - **Breeding:** feed wheat to cows/sheep, carrots to pigs/rabbits, seeds to chickens; two in love close together make a baby that grows up in 90 s (120 s cooldown).
 - **Husky companion:** wild huskies roam forests and snow; feed one raw or cooked meat to tame it (35% / 60% per try). It follows you, teleports if left behind, attacks hostile mobs near you, is immune to damage, and comes back after reconnects (one per player). Tap it to sit/stand. The older hostile Grey Wolf is unchanged.
 - Tile ids 150–156 and item ids 164–168 are used; tests: `test/farming.js`, `test/farming-ui.js`.
+
+## v1.9 — Quest Book & potions
+- **Quest Book (press Q / 📜 button / pause menu):** 20 quests (chop, mine, kill each monster type, fish, bake, harvest, breed, tame, brew, beat the Warden, 100 kills). Progress is saved per player and survives reconnects; finishing one pays out items straight into your bag.
+- **Buff potions** (3 gel + an ingredient at a Workbench): Swiftness (+30% speed, carrot), Haste (mine 60% faster, glow mushroom), Ironskin (+4 defense, iron bar), Regeneration (1.5 HP/s for 60 s, wheat + apple). Active buffs show in the HUD with a countdown.
+- **Warden Visor** helmet (2 Warden Cores + 5 iron bars): +5 defense, +15 HP.
+- Item ids 169–173 used; tests: `test/quests.js`, `test/quests-ui.js`.
