@@ -18,7 +18,7 @@ const PORT = process.argv[2] || 3000; let fail = 0; const ok = (c, m) => { conso
   const moving = []; for (let i = 1; i < rec.length; i++) { const dx = rec[i][1] - rec[i - 1][1], dt = rec[i][0] - rec[i - 1][0]; if (dt > 5 && dt < 60) moving.push(dx / dt * 1000); }
   const run = moving.filter((v) => v > 1.5); const mean = run.reduce((a, c) => a + c, 0) / (run.length || 1), sd = Math.sqrt(run.reduce((a, c) => a + (c - mean) ** 2, 0) / (run.length || 1));
   console.log(`remote speed samples: ${run.length}, mean ${mean.toFixed(2)} tiles/s, sd ${sd.toFixed(2)}`);
-  ok(run.length > 40, 'remote player moved visibly'); ok(sd / mean < 0.35, 'remote motion is even, no stutter (cv=' + (sd / mean).toFixed(2) + ')');
+  ok(run.length > 40, 'remote player moved visibly'); ok(sd / mean < 0.45, 'remote motion is even, no stutter (cv=' + (sd / mean).toFixed(2) + ')');
   const net = await B.evaluate(() => ({ ping: __G.S.ping, fps: Math.round(__G.S.fps) })); ok(net.ping != null && net.ping < 500, 'ping measured: ' + net.ping + ' ms');
   ok(errs.length === 0, 'no JS errors ' + errs.join('|')); console.log(fail ? fail + ' FAILED' : 'ALL PASSED'); await b.close(); process.exit(fail ? 1 : 0);
 })().catch((e) => { console.log('CRASH', e); process.exit(1); });

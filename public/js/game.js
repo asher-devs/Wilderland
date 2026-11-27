@@ -194,6 +194,12 @@ const Game = (() => {
     if (rt <= c.t) { const f = (rt - a.t) / (c.t - a.t || 1); o.x = a.x + (c.x - a.x) * f; o.y = a.y + (c.y - a.y) * f; }
     else { const e = Math.min(0.12, (rt - c.t) / 1000); o.x = c.x + c.vx * e; o.y = c.y + c.vy * e; }
   }
+  /** can the held item do something to this mob? (feed to breed, meat to tame, tap own husky to sit) */
+  function canInteract(o, it) {
+    const d = MOBS[o.type], h = it ? it.id : 0;
+    if (d.tameable) return o.fl & 2 ? true : h === I.RAW_MEAT || h === I.COOKED_MEAT;
+    return !!(DEFS.FEED[o.type] && h === DEFS.FEED[o.type] && !(o.fl & 1));
+  }
   function onSnap(m) {
     const arrive = performance.now();
     S.time = m.tm; S.rain = m.rain || 0;
@@ -207,7 +213,7 @@ const Game = (() => {
     for (const id of S.players.keys()) if (!seen.has(id)) S.players.delete(id);
     S.lines = m.fl || []; S.arrows = m.ar || []; S.boss = m.bs || null;
     const seenM = new Set();
-    for (const a of m.m) { seenM.add(a[0]); let o = S.mobs.get(a[0]); if (!o) { o = { id: a[0], type: a[1], x: a[2], y: a[3], t: Math.random() * 9, w: MOBS[a[1]].w, h: MOBS[a[1]].h, px: a[2], py: a[3] }; S.mobs.set(a[0], o); } o.tx = a[2]; o.ty = a[3]; pushSample(o, a[2], a[3], 0, 0, arrive); o.f = a[4]; o.hp = a[5]; o.maxhp = a[6]; o.hurt = a[7]; o.fuse = a[8] || 0; }
+    for (const a of m.m) { seenM.add(a[0]); let o = S.mobs.get(a[0]); if (!o) { o = { id: a[0], type: a[1], x: a[2], y: a[3], t: Math.random() * 9, w: MOBS[a[1]].w, h: MOBS[a[1]].h, px: a[2], py: a[3] }; S.mobs.set(a[0], o); } o.tx = a[2]; o.ty = a[3]; pushSample(o, a[2], a[3], 0, 0, arrive); o.f = a[4]; o.hp = a[5]; o.maxhp = a[6]; o.hurt = a[7]; o.fuse = a[8] || 0; o.fl = a[9] || 0; { const dd = MOBS[o.type]; if (dd) { const k = o.fl & 1 ? 0.55 : 1; o.w = dd.w * k; o.h = dd.h * k; } } }
     for (const id of S.mobs.keys()) if (!seenM.has(id)) S.mobs.delete(id);
     const seenD = new Set();
     for (const a of m.d) { seenD.add(a[0]); let o = S.drops.get(a[0]); if (!o) { o = { id: a[0], item: a[1], x: a[3], y: a[4], t: Math.random() * 6 }; S.drops.set(a[0], o); } o.n = a[2]; o.tx = a[3]; o.ty = a[4]; }
@@ -232,6 +238,8 @@ const Game = (() => {
       case 'roar': Sound.play('mobdie'); S.shake = Math.max(S.shake || 0, 0.9); for (let i = 0; i < 26; i++) part(x + (Math.random() - 0.5) * 4, y + Math.random() * 3, (Math.random() - 0.5) * 8, -Math.random() * 6, 0.9, [150, 120, 230], 3); break;
       case 'stomp': Sound.play('place', T.STONE); Sound.play('smoke'); S.shake = Math.max(S.shake || 0, 0.7); for (let i = 0; i < 30; i++) part(x + (Math.random() - 0.5) * 3, y - 0.2, (Math.random() - 0.5) * 12, -Math.random() * 4, 0.6, [170, 150, 120], 3); break;
       case 'bossdie': Sound.play('mobdie'); S.shake = 1.2; for (let i = 0; i < 90; i++) { const an = Math.random() * 6.28, sp = 3 + Math.random() * 12; part(x, y, Math.cos(an) * sp, Math.sin(an) * sp, 1 + Math.random() * 1, i % 2 ? [110, 230, 255] : [190, 140, 250], 3 + Math.random() * 3); } break;
+      case 'love': for (let i = 0; i < 6; i++) part(x + (Math.random() - 0.5) * 0.8, y - 0.2, (Math.random() - 0.5) * 2, -1.5 - Math.random() * 2, 0.9, [255, 100, 150], 3, 0); break;
+      case 'tame': if (v) { Sound.play('splash'); for (let i = 0; i < 14; i++) part(x + (Math.random() - 0.5), y - 0.3, (Math.random() - 0.5) * 4, -2 - Math.random() * 3, 1, [255, 100, 150], 3, 0); } else for (let i = 0; i < 8; i++) part(x, y - 0.3, (Math.random() - 0.5) * 3, -Math.random() * 2, 0.6, [150, 150, 150], 3); break;
       case 'cast': Sound.play('splash'); for (let i = 0; i < 6; i++) part(x, y, (Math.random() - 0.5) * 3, -Math.random() * 3, 0.5, [170, 215, 255], 2); break;
       case 'bite': Sound.play('splash'); S.texts.push({ x, y: y - 0.9, txt: '!', life: 0.9, max: 0.9, c: '#ff5a4a' }); for (let i = 0; i < 8; i++) part(x, y, (Math.random() - 0.5) * 4, -Math.random() * 4, 0.5, [190, 225, 255], 2); break;
       case 'catch': Sound.play('splash'); for (let i = 0; i < 12; i++) part(x, y, (Math.random() - 0.5) * 5, -Math.random() * 7, 0.7, [190, 225, 255], 3); break;
@@ -346,7 +354,11 @@ const Game = (() => {
         }
       } else if (a.mode === 'place') {
         const id = get(tx, ty);
-        if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
+        const pet = a.edge ? S.mobs.size && [...S.mobs.values()].find((o) => Math.abs(aim.x - o.x) < o.w / 2 + 0.35 && aim.y > o.y - 0.35 && aim.y < o.y + o.h + 0.35 && Math.hypot(o.x - m.x, o.y - m.y) < 5.5 && canInteract(o, it)) : null;
+        if (pet) { send({ t: 'interact', id: pet.id }); }
+        else if (it && it.kind === 'hoe' && inReach(tx, ty)) { if (now > placeT) { placeT = now + 220; send({ t: 'till', x: tx, y: ty }); acting = true; } }
+        else if (a.edge && it && it.plant && inReach(tx, ty) && (id === T.FARMLAND || (id === T.AIR && get(tx, ty + 1) === T.FARMLAND))) { send({ t: 'plant', x: tx, y: ty }); }
+        else if (a.edge && id === T.CHEST && inReach(tx, ty)) { send({ t: 'chestOpen', x: tx, y: ty }); }
         else if (a.edge && DEFS.DOORTILE[id] && inReach(tx, ty)) { send({ t: 'door', x: tx, y: ty }); }
         else if (a.edge && (id === T.BED || id === T.BED_R) && inReach(tx, ty)) { send({ t: 'sleep', x: tx, y: ty }); }
         else if (a.edge && (id === T.BENCH || id === T.FURNACE || id === T.MASON) && inReach(tx, ty)) { UI.openInventory(); }
@@ -504,7 +516,8 @@ const Game = (() => {
     // drops
     for (const d of S.drops.values()) { const sx = d.x * TS + ox, sy = (d.y) * TS + oy + Math.sin(d.t * 3) * TS * 0.06 - TS * 0.2; const sz = TS * 0.5; g.drawImage(Gfx.icon(d.item), sx - sz / 2, sy - sz / 2, sz, sz); if (d.n > 1) { g.fillStyle = '#fff'; g.font = `${Math.round(TS * 0.3)}px monospace`; g.fillText(d.n, sx + sz / 3, sy + sz / 1.5); } }
     // mobs
-    for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16, { f: o.f, t: o.t, hurt: o.hurt, air: o.air, id: o.id, moving: Math.abs(o.tx - o.x) > 0.004 || Math.abs(o.ty - o.y) > 0.004, angry: MOBS[o.type].neutral && o.hurt, fuse: o.fuse, ph: S.boss && S.boss.id === o.id ? S.boss.ph : 0, sh: S.boss && S.boss.id === o.id && S.boss.sh, st: S.boss && S.boss.id === o.id && S.boss.st });
+    for (const o of S.mobs.values()) if (o.fl & 8) { g.fillStyle = '#ff6b9a'; g.font = Math.round(TS * 0.7) + 'px sans-serif'; g.textAlign = 'center'; g.fillText('♥', o.x * TS + ox, (o.y - 0.4 + Math.sin(S.clock * 4) * 0.1) * TS + oy); }
+    for (const o of S.mobs.values()) Gfx.drawMob(g, o.type, o.x * TS + ox, (o.y + o.h) * TS + oy, TS / 16 * (o.fl & 1 ? 0.55 : 1), { tamed: o.fl & 2, sit: o.fl & 4, f: o.f, t: o.t, hurt: o.hurt, air: o.air, id: o.id, moving: Math.abs(o.tx - o.x) > 0.004 || Math.abs(o.ty - o.y) > 0.004, angry: MOBS[o.type].neutral && o.hurt, fuse: o.fuse, ph: S.boss && S.boss.id === o.id ? S.boss.ph : 0, sh: S.boss && S.boss.id === o.id && S.boss.sh, st: S.boss && S.boss.id === o.id && S.boss.st });
     // other players
     for (const p of S.players.values()) { const dead = p.a === 9, slp = p.a === 10; Gfx.drawPlayer(g, p.x * TS + ox, (p.y + C.PH) * TS + oy, TS / 16, { look: p.look, f: p.f, t: p.t, walk: p.walkAmt, air: !slp && (p.a & 3) === 2, swing: (p.a & 4) && !dead && !slp ? p.swingT : -1, held: p.held, head: p.head, body: p.body, dead, sleep: slp }); }
     if (S.me && !(S.dead)) { const m = S.me; Gfx.drawPlayer(g, m.x * TS + ox, (m.y + C.PH) * TS + oy, TS / 16, { look: myLook(), f: m.f, t: m.walkT, walk: m.walk ? 1 : 0, air: !S.sleeping && !m.onGround && !m.inWater, swing: m.swing, held: S.inv[S.sel] ? S.inv[S.sel][0] : 0, head: S.eq.head ? S.eq.head[0] : 0, body: S.eq.body ? S.eq.body[0] : 0, hurt: S.flash > 0.5 ? 1 : 0, sleep: S.sleeping }); }

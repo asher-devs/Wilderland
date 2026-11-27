@@ -68,3 +68,9 @@ Free hosting wipes the database on every deploy, so each player's device keeps a
 - **Culled snapshots:** each player only receives mobs, drops, projectiles and effects within ~58×40 tiles of them (about 10× less data in a busy world). The boss bar data is always sent.
 - **Interpolation buffer:** remote players and mobs are rendered ~100 ms in the past between real snapshots (with a short extrapolation if a packet is late) instead of chasing the latest position.
 - **Ping/FPS readout** in the HUD (Settings → Show ping & FPS), **Performance mode** (renders at 1× resolution, fewer particles, blocky lighting) with an automatic hint when FPS stays low. Tests: `test/netperf.js`, `test/smooth.js`.
+
+## v1.8 — Farming, breeding & taming
+- **Farming:** craft a Hoe (2 planks + 2 fibre), right-click grass/dirt to till farmland, plant Wheat Seeds (from tall grass, 14%) or Carrots (rabbits drop them). Crops grow in 3 stages while you are near; water within 4 tiles triples growth speed, rain boosts it. Breaking ripe crops harvests; wheat → bread (3 wheat, bench). Seeds come back from sprouts.
+- **Breeding:** feed wheat to cows/sheep, carrots to pigs/rabbits, seeds to chickens; two in love close together make a baby that grows up in 90 s (120 s cooldown).
+- **Husky companion:** wild huskies roam forests and snow; feed one raw or cooked meat to tame it (35% / 60% per try). It follows you, teleports if left behind, attacks hostile mobs near you, is immune to damage, and comes back after reconnects (one per player). Tap it to sit/stand. The older hostile Grey Wolf is unchanged.
+- Tile ids 150–156 and item ids 164–168 are used; tests: `test/farming.js`, `test/farming-ui.js`.

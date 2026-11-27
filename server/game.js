@@ -105,7 +105,7 @@ class World {
       invDirty: true, statDirty: true, msgs: 0, msgT: Date.now(), chatTimes: [], returning: !!sv, look: cleanLook(look || (sv && sv.look)),
     };
     if (sv) {
-      p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
+      p.pet = !!sv.pet; p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
       if (typeof sv.x === 'number' && sv.y > 0) { p.x = sv.x; p.y = sv.y; }
     } else {
       addToInv(p.inv, I.APPLE, 3); addToInv(p.inv, T.TORCH, 6);
@@ -122,7 +122,7 @@ class World {
     for (let ty = Math.floor(y); ty <= Math.floor(y + b.h - 1e-6); ty++) for (let tx = Math.floor(x - hw); tx <= Math.floor(x + hw - 1e-6); tx++) if (this.coll(tx, ty)) return true;
     return false;
   }
-  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y) } }; }
+  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y), pet: p.pet ? 1 : 0 } }; }
   dropPlayer(p, silent) {
     if (!this.players.has(p.id)) return;
     this.players.delete(p.id);
@@ -171,6 +171,9 @@ class World {
       case 'sleep': return this.onSleep(p, m);
       case 'door': return this.onDoor(p, m);
       case 'summon': return this.summonWarden(p);
+      case 'till': return this.onTill(p, m);
+      case 'plant': return this.onPlant(p, m);
+      case 'interact': return this.onInteract(p, m);
       case 'ping': return this.send(p, { t: 'pong', c: m.c });
       case 'fish': return this.onFish(p, m);
       case 'wake': return this.wake(p);
@@ -248,12 +251,14 @@ class World {
       if (id === T.BED_R) this.spawnDrop(T.BED, 1, x + 0.5, y + 0.5);
       for (const q of this.players.values()) if (q.sleep && (q.sleep.x === x || q.sleep.x === ox) && q.sleep.y === y) this.wake(q);
     }
+    this.cropDrops(id, x, y);
+    if (id === T.PLANT && Math.random() < D.CROPS.seedChance) this.spawnDrop(I.WHEAT_SEEDS, 1, x + 0.5, y + 0.5);
     if (b.drop >= 0 && Math.random() < b.dropP) this.spawnDrop(b.drop, 1, x + 0.5, y + 0.5);
     if (D.LEAF[id] && id !== T.PINE && Math.random() < 0.07) this.spawnDrop(I.APPLE, 1, x + 0.5, y + 0.5);
     if (D.LOGS[id]) this.fellTree(p, x, y, id);
     // plants above lose their support
     const up = this.get(x, y - 1);
-    if (D.DECOR[up] && up !== T.ROCK && up !== T.MUSHROOM) { this.setTile(x, y - 1, T.AIR); if (BLOCKS[up].drop >= 0 && Math.random() < BLOCKS[up].dropP) this.spawnDrop(BLOCKS[up].drop, 1, x + 0.5, y - 0.5); }
+    if (D.DECOR[up] && up !== T.ROCK && up !== T.MUSHROOM) { this.setTile(x, y - 1, T.AIR); this.cropDrops(up, x, y - 1); if (BLOCKS[up].drop >= 0 && Math.random() < BLOCKS[up].dropP) this.spawnDrop(BLOCKS[up].drop, 1, x + 0.5, y - 0.5); }
     if (tool && tool.i >= 0) {
       const s = p.inv[tool.i]; s[2] -= D.toolWear(id); if (s[2] <= 0) { p.inv[tool.i] = null; this.send(p, { t: 'toolBreak', item: s[0] }); }
       p.invDirty = true;
@@ -335,6 +340,7 @@ class World {
     if (hit && it && it.dur) { s[2]--; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); } p.invDirty = true; }
   }
   hurtMob(mob, dmg, dir, p) {
+    if (mob.owner) return; // tamed pets cannot be hurt
     if (mob.type === 'warden') dmg *= mob.sh ? 0.35 : mob.stun > 0 ? 1.5 : 1;
     dmg = Math.max(1, Math.round(dmg));
     if (mob.type === 'warden') { mob.hp -= dmg; mob.hurt = 0.12; this.fx.push(['mobhit', mob.x + (Math.random() - 0.5) * 2.4, mob.y + 1 + Math.random() * 3, dmg]);
@@ -527,7 +533,9 @@ class World {
     this.spawnT -= dt;
     if (this.spawnT <= 0 && this.settings.mobs && this.players.size) { this.spawnT = 1.0; this.trySpawn(night); }
     this.animalT = (this.animalT || 0) - dt; if (this.animalT <= 0 && this.players.size) { this.animalT = 2.2; this.trySpawnAnimals(night); }
-    this.stepFishing(dt);
+    this.stepFishing(dt); this.stepCrops(dt);
+    this.breedT = (this.breedT || 0) - dt; if (this.breedT <= 0) { this.breedT = 0.5; this.stepBreeding(); }
+    this.petT = (this.petT || 0) - dt; if (this.petT <= 0) { this.petT = 3; this.ensurePets(); }
     // mobs
     for (const mob of this.mobs.values()) this.stepMob(mob, dt, night, solid);
     // drops
@@ -551,7 +559,7 @@ class World {
     this.stepArrows(dt);
     // contact damage
     for (const mob of this.mobs.values()) {
-      if (!mob.dmg || (MOBS[mob.type].neutral && !(mob.angry > 0))) continue;
+      if (!mob.dmg || mob.owner || (MOBS[mob.type].neutral && !(mob.angry > 0))) continue;
       for (const p of this.players.values()) {
         if (p.dead || p.invul > 0) continue;
         if (Math.abs(mob.x - p.x) < (mob.w + p.w) / 2 && mob.y < p.y + p.h && mob.y + mob.h > p.y) this.hurtPlayer(p, mob.dmg, mob.x < p.x ? 1 : -1, mob.name);
@@ -592,6 +600,105 @@ class World {
       }
       if (dead) this.arrows.splice(i, 1);
     }
+  }
+
+  // ---------------------------------------------------------------- farming, breeding, taming
+  cropDrops(id, x, y) {
+    const ripe = D.CROPS.ripe[id];
+    if (ripe) for (const [it, lo, hi] of ripe) this.spawnDrop(it, lo + Math.floor(Math.random() * (hi - lo + 1)), x + 0.5, y + 0.5);
+    else if (D.CROPS.seed[id]) this.spawnDrop(D.CROPS.seed[id], 1, x + 0.5, y + 0.5);
+  }
+  onTill(p, m) {
+    if (p.dead || p.sleep) return; const s = p.inv[p.sel]; if (!s || ITEMS[s[0]].kind !== 'hoe') return;
+    const x = m.x | 0, y = m.y | 0, id = this.get(x, y); if (!this.reach(p, x, y)) return;
+    if (!(id === T.DIRT || id === T.GRASS || id === T.MUD) || !(this.get(x, y - 1) === T.AIR || D.DECOR[this.get(x, y - 1)])) return;
+    if (D.DECOR[this.get(x, y - 1)]) this.setTile(x, y - 1, T.AIR);
+    this.setTile(x, y, T.FARMLAND); this.fx.push(['place', x + 0.5, y + 0.5, T.DIRT]);
+    s[2] -= 1; if (s[2] <= 0) { p.inv[p.sel] = null; this.send(p, { t: 'toolBreak', item: s[0] }); } p.invDirty = true;
+  }
+  onPlant(p, m) {
+    if (p.dead || p.sleep) return; const s = p.inv[p.sel]; if (!s || !ITEMS[s[0]].plant) return;
+    const x = m.x | 0; let y = m.y | 0;
+    const cy = this.get(x, y) === T.FARMLAND ? y - 1 : (this.get(x, y + 1) === T.FARMLAND ? y : -1);
+    if (cy < 0 || !this.reach(p, x, cy) || this.get(x, cy) !== T.AIR) return;
+    this.setTile(x, cy, ITEMS[s[0]].plant); this.fx.push(['place', x + 0.5, cy + 0.5, T.PLANT]);
+    if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true;
+  }
+  /** grow crops near players: faster with water close to the farmland and in rain */
+  stepCrops(dt) {
+    this.cropT = (this.cropT || 0) - dt; if (this.cropT > 0) return; this.cropT = 2.5;
+    const seen = new Set();
+    for (const p of this.players.values()) {
+      const x0 = Math.max(1, Math.floor(p.x) - 45), x1 = Math.min(this.W - 2, Math.floor(p.x) + 45), y0 = Math.max(1, Math.floor(p.y) - 30), y1 = Math.min(this.H - 3, Math.floor(p.y) + 30);
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const id = this.get(x, y), nx = D.CROPS.next[id]; if (!nx) continue; const key = y * this.W + x; if (seen.has(key)) continue; seen.add(key);
+        if (this.get(x, y + 1) !== T.FARMLAND) { this.setTile(x, y, T.AIR); continue; }
+        let wet = false; for (let dx = -4; dx <= 4 && !wet; dx++) if (this.get(x + dx, y + 1) === T.WATER || this.get(x + dx, y) === T.WATER) wet = true;
+        const chance = 0.03 * (wet ? 3 : 1) * (this.weather.rain > 0.3 ? 1.8 : 1);
+        if (Math.random() < chance) this.setTile(x, y, nx);
+      }
+    }
+  }
+  onInteract(p, m) {
+    if (p.dead || p.sleep) return; const mob = this.mobs.get(m.id | 0); if (!mob) return;
+    if (Math.hypot(mob.x - p.x, mob.y + mob.h / 2 - (p.y + 0.8)) > 5.5) return;
+    const def = MOBS[mob.type], s = p.inv[p.sel], hid = s ? s[0] : 0;
+    const eat = () => { if (--s[1] <= 0) p.inv[p.sel] = null; p.invDirty = true; };
+    if (def.tameable) {
+      if (mob.owner) { if (mob.owner === p.id) { mob.sit = !mob.sit; this.fx.push(['love', mob.x, mob.y, mob.sit ? 0 : 1]); } return; }
+      if (hid === I.RAW_MEAT || hid === I.COOKED_MEAT) {
+        if (p.pet) return this.send(p, { t: 'toast', m: 'You already have a husky companion' });
+        eat();
+        if (Math.random() < (hid === I.COOKED_MEAT ? 0.6 : 0.35)) { mob.owner = p.id; mob.sit = false; mob.angry = 0; p.pet = true; this.dirty = true; this.fx.push(['tame', mob.x, mob.y, 1]); this.send(p, { t: 'toast', m: '🐕 The husky is now your companion! Tap it to sit/stand.' }); }
+        else this.fx.push(['tame', mob.x, mob.y, 0]);
+      }
+      return;
+    }
+    if (D.FEED[mob.type] && hid === D.FEED[mob.type] && !mob.baby && !(mob.love > 0) && !(mob.cool > 0)) {
+      eat(); mob.love = 14; this.fx.push(['love', mob.x, mob.y, 1]);
+    }
+  }
+  growUp(mob) { const def = MOBS[mob.type]; mob.baby = false; mob.w = def.w; mob.h = def.h; mob.y -= def.h * 0.45; }
+  /** two animals in love close to each other make a baby */
+  stepBreeding() {
+    const lovers = []; for (const m of this.mobs.values()) if (m.love > 0 && !m.baby && D.FEED[m.type]) lovers.push(m);
+    for (const m of lovers) { // walk toward the nearest partner in love
+      let best = null, bd = 16; for (const o of lovers) if (o !== m && o.type === m.type) { const d = Math.abs(o.x - m.x); if (d < bd) { bd = d; best = o; } }
+      if (best && bd > 1.6 && !MOBS[m.type].fly) { m.dir = best.x < m.x ? -1 : 1; m.nextT = m.t + 1.4; }
+    }
+    for (let i = 0; i < lovers.length; i++) for (let j = i + 1; j < lovers.length; j++) {
+      const a = lovers[i], b = lovers[j]; if (a.type !== b.type || a.love <= 0 || b.love <= 0) continue;
+      if (Math.hypot(a.x - b.x, a.y - b.y) > 3.2) continue;
+      a.love = b.love = 0; a.cool = b.cool = 120; const def = MOBS[a.type];
+      const baby = this.addMob(a.type, (a.x + b.x) / 2, Math.min(a.y, b.y) + def.h * 0.45, 0, DIFF.normal); baby.baby = true; baby.age = 0; baby.w = def.w * 0.55; baby.h = def.h * 0.55; baby.hp = baby.maxhp = Math.max(3, Math.round(def.hp * 0.5));
+      this.fx.push(['love', a.x, a.y, 1], ['love', b.x, b.y, 1], ['love', baby.x, baby.y, 1]);
+    }
+  }
+  /** keep each player's husky alive: respawn it next to them if they own one */
+  ensurePets() {
+    for (const p of this.players.values()) {
+      if (!p.pet || p.dead) continue;
+      let has = false; for (const m of this.mobs.values()) if (m.owner === p.id) { has = true; break; }
+      if (!has) { const def = MOBS.husky, w = this.addMob('husky', p.x - p.f * 1.5, p.y + p.h - def.h, 0, DIFF.normal); w.owner = p.id; w.sit = false; this.fx.push(['tame', w.x, w.y, 1]); }
+    }
+  }
+  stepPet(mob, dt, solid) {
+    const owner = this.players.get(mob.owner) || [...this.players.values()].find((q) => q.id === mob.owner);
+    if (!owner) { this.mobs.delete(mob.id); return; }
+    mob.t += dt; if (mob.hurt > 0) mob.hurt -= dt; mob.atk = (mob.atk || 0) - dt;
+    const def = MOBS.husky, dx = owner.x - mob.x, dist = Math.hypot(dx, owner.y - mob.y);
+    if (!owner.dead && (dist > 26 || Math.abs(owner.y - mob.y) > 14)) { mob.x = owner.x - owner.f * 1.2; mob.y = owner.y + owner.h - mob.h - 0.05; mob.vx = mob.vy = 0; }
+    let foe = null, fd = 9;
+    for (const m of this.mobs.values()) { const md = MOBS[m.type]; if (md.animal || md.passive || m.owner) continue; if (Math.hypot(m.x - owner.x, m.y - owner.y) > 13) continue; const d = Math.hypot(m.x - mob.x, m.y - mob.y); if (d < fd) { fd = d; foe = m; } }
+    let dir = 0, spd = 4.2;
+    if (foe) {
+      const fdx = foe.x - mob.x; dir = Math.abs(fdx) < 0.7 ? 0 : fdx < 0 ? -1 : 1; spd = 6.5;
+      if (Math.abs(fdx) < 1.5 && Math.abs((foe.y + foe.h / 2) - (mob.y + mob.h / 2)) < 1.8 && mob.atk <= 0) { mob.atk = 0.75; this.hurtMob(foe, def.dmg + 2, dir || 1, owner); }
+    } else if (!mob.sit && dist > 3.2) { dir = dx < 0 ? -1 : 1; spd = dist > 12 ? 8 : 4.6; }
+    mob.vx += (dir * spd - mob.vx) * Math.min(1, dt * 8); if (dir) mob.f = dir;
+    mob.vy = Math.min(C.MAXFALL, mob.vy + C.GRAVITY * dt); D.moveBody(mob, dt, solid);
+    if (mob.hitX && mob.onGround && dir) mob.vy = -10.5;
+    if (!dir) mob.vx *= 0.7;
   }
 
   // ---------------------------------------------------------------- boss: the Hollow Warden
@@ -752,6 +859,9 @@ class World {
   }
   stepMob(mob, dt, night, solid) {
     if (mob.type === 'warden') return this.stepWarden(mob, dt, solid);
+    if (mob.owner) return this.stepPet(mob, dt, solid);
+    if (mob.love > 0) mob.love -= dt; if (mob.cool > 0) mob.cool -= dt;
+    if (mob.baby) { mob.age += dt; if (mob.age > 90) this.growUp(mob); }
     const def = MOBS[mob.type];
     // despawn
     let nearest = null, nd = Infinity;
@@ -856,10 +966,10 @@ class World {
   animalFor(b, night) {
     const r = Math.random();
     switch (b) {
-      case 0: return night ? (r < 0.5 ? 'fox' : r < 0.75 ? 'deer' : 'bear') : (r < 0.28 ? 'deer' : r < 0.45 ? 'pig' : r < 0.6 ? 'fox' : r < 0.7 ? 'bear' : 'bird');
+      case 0: return night ? (r < 0.3 ? 'fox' : r < 0.5 ? 'deer' : r < 0.72 ? 'husky' : 'bear') : (r < 0.28 ? 'deer' : r < 0.45 ? 'pig' : r < 0.6 ? 'fox' : r < 0.7 ? 'bear' : 'bird');
       case 3: return night ? (r < 0.5 ? 'cow' : 'sheep') : (r < 0.28 ? 'cow' : r < 0.5 ? 'sheep' : r < 0.66 ? 'pig' : r < 0.82 ? 'chicken' : r < 0.92 ? 'deer' : 'bird');
       case 1: return night ? 'camel' : (r < 0.7 ? 'camel' : 'fox');
-      case 2: return r < 0.55 ? 'penguin' : r < 0.8 ? 'fox' : 'bear';
+      case 2: return r < 0.45 ? 'penguin' : r < 0.65 ? 'husky' : r < 0.85 ? 'fox' : 'bear';
       case 4: return r < 0.3 ? 'sheep' : r < 0.55 ? 'deer' : r < 0.75 ? 'bear' : night ? 'sheep' : 'bird';
       default: return r < 0.55 ? 'turtle' : r < 0.8 ? 'chicken' : night ? 'turtle' : 'bird';
     }
@@ -963,7 +1073,7 @@ class World {
       p.push([q.id, r2(q.x), r2(q.y), r2(q.vx), r2(q.vy), q.f, q.dead ? 9 : q.a, s ? s[0] : 0, Math.ceil(q.hp), q.maxhp, q.eq.head ? q.eq.head[0] : 0, q.eq.body ? q.eq.body[0] : 0]);
     }
     const m = [], d = [];
-    for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0, o.fuse > 0 ? r2(o.fuse) : 0]);
+    for (const o of this.mobs.values()) m.push([o.id, o.type, r2(o.x), r2(o.y), o.f, o.hp, o.maxhp, o.hurt > 0 ? 1 : 0, o.fuse > 0 ? r2(o.fuse) : 0, (o.baby ? 1 : 0) | (o.owner ? 2 : 0) | (o.sit ? 4 : 0) | (o.love > 0 ? 8 : 0)]);
     for (const o of this.drops.values()) d.push([o.id, o.item, o.n, r2(o.x), r2(o.y)]);
     const fl = []; for (const q of this.players.values()) if (q.line) fl.push([q.id, r2(q.line.x), r2(q.line.y), q.line.st]);
     const b = this.findBoss();
