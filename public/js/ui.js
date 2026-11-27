@@ -185,7 +185,7 @@ const UI = (() => {
     const b = $('quest-body'); if (!b) return; const q = S.q || { prog: {}, done: {} };
     const rows = DEFS.QUESTS.map((x) => ({ x, d: !!q.done[x.id], v: q.prog[x.id] || 0 })).sort((a, c) => a.d - c.d);
     const nd = rows.filter((r) => r.d).length;
-    b.innerHTML = `<small style="color:var(--mu)">${nd} / ${rows.length} complete — rewards are added to your bag (press Q)</small>` + rows.map(({ x, d, v }) => `<div class="qrow${d ? ' done' : ''}"><div class="qn"><span>${d ? '✔ ' : ''}${esc(x.name)}</span><span>${d ? 'Done' : v + ' / ' + x.n}</span></div><small>${esc(x.desc)}</small>${d ? '' : `<div class="qbar"><i style="width:${v / x.n * 100}%"></i></div>`}<small>Reward: ${x.reward.map((r) => r[1] + '× ' + esc(DEFS.ITEMS[r[0]].name)).join(', ')}</small></div>`).join('');
+    b.innerHTML = `<small style="color:var(--mu)">${nd} / ${rows.length} complete — rewards are added to your bag (press J)</small>` + rows.map(({ x, d, v }) => `<div class="qrow${d ? ' done' : ''}"><div class="qn"><span>${d ? '✔ ' : ''}${esc(x.name)}</span><span>${d ? 'Done' : v + ' / ' + x.n}</span></div><small>${esc(x.desc)}</small>${d ? '' : `<div class="qbar"><i style="width:${v / x.n * 100}%"></i></div>`}<small>Reward: ${x.reward.map((r) => r[1] + '× ' + esc(DEFS.ITEMS[r[0]].name)).join(', ')}</small></div>`).join('');
   }
   function updateQuests() { if (state.qOpen) renderQuests(); }
   function updateBuffs() {

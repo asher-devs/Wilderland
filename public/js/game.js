@@ -279,7 +279,7 @@ const Game = (() => {
     if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' '].includes(k)) e.preventDefault();
     if (k >= '0' && k <= '9') { setSel(k === '0' ? 9 : +k - 1); }
     else if (k === 'e' || k === 'i') UI.toggleInventory();
-    else if (k === 'q') UI.toggleQuests();
+    else if (k === 'j') UI.toggleQuests();
     else if (k === 'f') reviveNear();
     else if (k === 'g') { const a = aimWorld(); send({ t: 'mark', x: a.x, y: a.y }); }
     else if (k === 'escape') UI.escape();

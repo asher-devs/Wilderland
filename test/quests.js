@@ -39,7 +39,7 @@ const rate = (haste) => { if (!haste) delete p.buffs.haste; world.setTile(sx + 3
 const fast = rate(true), slow = rate(false); ok(fast < slow, `haste mines faster (${fast} < ${slow} ticks)`);
 p.buffs.swift = Date.now() - 1; world.step(0.05); ok(!p.buffs.swift, 'buff expires');
 console.log('# persistence');
-world.dropPlayer(p); const fake2 = { open: true, sent: [], send(m) { this.sent.push(typeof m === 'string' ? JSON.parse(m) : m); }, close() {} };
+p.buffs.iron = Date.now() + 50000; world.dropPlayer(p); const fake2 = { open: true, sent: [], send(m) { this.sent.push(typeof m === 'string' ? JSON.parse(m) : m); }, close() {} };
 const p2 = world.addPlayer(fake2, 'pa', 'T'); ok(p2.q.done.wood === 1 && p2.q.done.slime === 1, 'quest progress survives reconnect');
-world.welcome(p2); const w = fake2.sent.find((m) => m.t === 'welcome'); ok(w && w.q && w.q.done.wood === 1, 'welcome carries quests');
+world.welcome(p2); ok(p2.buffs.iron > Date.now() + 40000, 'active buffs survive reconnect'); const w = fake2.sent.find((m) => m.t === 'welcome'); ok(w && w.q && w.q.done.wood === 1, 'welcome carries quests');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

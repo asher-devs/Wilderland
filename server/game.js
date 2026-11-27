@@ -105,7 +105,7 @@ class World {
       buffs: {}, q: { prog: {}, done: {} }, qDirty: false, invDirty: true, statDirty: true, msgs: 0, msgT: Date.now(), chatTimes: [], returning: !!sv, look: cleanLook(look || (sv && sv.look)),
     };
     if (sv) {
-      p.pet = !!sv.pet; if (sv.q) p.q = { prog: sv.q.prog || {}, done: sv.q.done || {} }; p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
+      p.pet = !!sv.pet; if (sv.bf) for (const k in sv.bf) if (D.BUFFS[k]) p.buffs[k] = Date.now() + sv.bf[k] * 1000; if (sv.q) p.q = { prog: sv.q.prog || {}, done: sv.q.done || {} }; p.bed = sv.bed || null; p.inv = sv.inv || p.inv; while (p.inv.length < C.INV) p.inv.push(null); p.eq = sv.eq || p.eq; p.hp = Math.max(1, sv.hp || p.hp);
       if (typeof sv.x === 'number' && sv.y > 0) { p.x = sv.x; p.y = sv.y; }
     } else {
       addToInv(p.inv, I.APPLE, 3); addToInv(p.inv, T.TORCH, 6);
@@ -122,7 +122,7 @@ class World {
     for (let ty = Math.floor(y); ty <= Math.floor(y + b.h - 1e-6); ty++) for (let tx = Math.floor(x - hw); tx <= Math.floor(x + hw - 1e-6); tx++) if (this.coll(tx, ty)) return true;
     return false;
   }
-  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y), pet: p.pet ? 1 : 0, q: p.q } }; }
+  playerData(p) { return { pid: p.pid, name: p.name, data: { look: p.look, bed: p.bed || null, inv: p.inv, eq: p.eq, hp: p.dead ? p.maxhp : p.hp, x: r2(p.x), y: r2(p.y), pet: p.pet ? 1 : 0, q: p.q, bf: this.buffList(p) } }; }
   /** quest book: record progress for a player; ev = mine|kill|craft|fish|harvest|breed|tame|boss, key = tile id / mob type / item id */
   quest(p, ev, key, n = 1) {
     if (!p || !p.q) return;

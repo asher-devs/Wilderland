@@ -7,7 +7,7 @@ const PORT = process.argv[2] || 3000; let fail = 0; const ok = (c, m) => { conso
   await page.setViewport({ width: 1000, height: 600 }); await page.goto('http://localhost:' + PORT); await sleep(400);
   await page.evaluate(() => { UI.go('worlds'); document.getElementById('cw-size').value = 'medium'; document.getElementById('cw-seed').value = '5'; document.getElementById('btn-create').click(); });
   await page.waitForFunction(() => document.body.classList.contains('playing')); await sleep(800);
-  await page.keyboard.press('q'); await sleep(300);
+  await page.keyboard.press('j'); await sleep(300);
   ok(await page.evaluate(() => document.getElementById('quests').classList.contains('on') && document.querySelectorAll('.qrow').length === DEFS.QUESTS.length), 'Q opens the quest book with all quests');
   await page.screenshot({ path: '/tmp/quests.png' }); await page.keyboard.press('Escape'); await sleep(200);
   ok(await page.evaluate(() => !document.getElementById('quests').classList.contains('on')), 'Escape closes it');
